@@ -1,8 +1,62 @@
 # Task Checkpoint MCP
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](pyproject.toml)
+[![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
+
 给长任务做"做一步、存一步"的存档：中断后新会话能接着做，做错了能退回任意一步。
 
 一个 stdio MCP 服务器，**只用 Python 标准库**，不装任何第三方包。
+
+## 快速开始
+
+**一、装**
+
+```bash
+pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+```
+
+**二、在客户端里接上**（Claude Code、Codex、Cursor 等都是同一段配置）
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": { "command": "tc-mcp", "args": [] }
+  }
+}
+```
+
+**三、把 `SKILL.md` 装进技能目录**，不装的话 Agent 不会主动存档
+
+```bash
+mkdir -p ~/.claude/skills/task-checkpoint
+curl -fsSL -o ~/.claude/skills/task-checkpoint/SKILL.md \
+  https://raw.githubusercontent.com/qddfxp/task-checkpoint-mcp/main/SKILL.md
+```
+
+（技能目录按客户端而定，见下面"把 SKILL.md 装进 Agent 的技能目录"。如果 `raw.githubusercontent.com` 访问不了，先按下面"安装"里的方式二把仓库 clone 下来，再 `cp SKILL.md` 过去。）
+
+**四、交给 Agent 用。** 一个任务就四步：
+
+```
+tc_init    开任务
+tc_save    每完成一步存一次（带 conclusion 和 next）
+tc_resume  新会话开头先调这个接上进度
+tc_restore 退回去（先 apply:false 预览，再 apply:true）
+```
+
+中途被打断、隔天换个模型重开，新会话调一次 `tc_resume` 拿到的是这个：
+
+```
+任务：重构认证模块
+目标：把 session 改成 JWT
+当前步骤：3
+下一步：把三个视图函数切到新入口，删旧函数
+未落档：src/views/auth.py, src/views/user.py
+```
+
+`handoff` 字段就是这段文本，可以直接粘给新会话。它同时告诉你哪几个文件改了但还没落档。
 
 ## 为什么不直接用 `git stash` 或随手 commit 一下
 
@@ -70,14 +124,14 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 
 所以要让 Agent 每完成一步就存一步 —— 这份约束写在 `SKILL.md` 里，得把它装进 Agent 的技能目录（见下面"把 SKILL.md 装进 Agent 的技能目录"）。不装它，文件回退点照常产生，但没人知道当初要干什么、下一步该干什么。
 
-典型流程：
+四条铁律：
 
-```
-tc_init    开任务
-tc_save    每完成一步存一次（带 conclusion 和 next）
-tc_resume  新会话开头先调这个接上进度
-tc_restore 退回去（先 apply:false 预览，再 apply:true）
-```
+1. 开长任务前先 `tc_init`，一个任务一个名。已有活动任务会被**挂起而不是关闭**，可以 `tc_switch` 切回去。
+2. 每完成一步就 `tc_save`，并且**必须填 `conclusion` 和 `next`**。不填，新会话就只看得到一堆文件路径。
+3. 新会话、或中断后继续时，**第一件事是 `tc_resume`**，不要从零猜进度。
+4. **回退前先预览**：先 `apply: false` 看清单，确认了再 `apply: true`。
+
+一步的粒度：能独立说清"做完了、结论是 X"的单元。太细（每个文件一次）会淹没有效信息，太粗（整个任务一次）就失去了回退的意义。
 
 ### 工具
 
@@ -309,6 +363,55 @@ Checkpoint and resume for long agent tasks: save each step as you go, pick the w
 
 A stdio MCP server written in **pure Python standard library** — no third-party packages. Python 3.10+.
 
+## Quick start
+
+**1. Install**
+
+```bash
+pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+```
+
+**2. Wire it into your client** (same block for Claude Code, Codex, Cursor and the rest)
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": { "command": "tc-mcp", "args": [] }
+  }
+}
+```
+
+**3. Install `SKILL.md` into the skill directory.** Without it the agent won't checkpoint on its own.
+
+```bash
+mkdir -p ~/.claude/skills/task-checkpoint
+curl -fsSL -o ~/.claude/skills/task-checkpoint/SKILL.md \
+  https://raw.githubusercontent.com/qddfxp/task-checkpoint-mcp/main/SKILL.md
+```
+
+(Skill directories differ per client — see "Install SKILL.md into the agent's skill directory" below.)
+
+**4. Let the agent use it.** A task is four calls:
+
+```
+tc_init    start a task
+tc_save    once per completed step (with conclusion and next)
+tc_resume  first call in a new session, to pick up where you left off
+tc_restore roll back (apply:false to preview, then apply:true)
+```
+
+Interrupted mid-task, resumed the next day on another model — one `tc_resume` in the new session gives you this:
+
+```
+任务：重构认证模块
+目标：把 session 改成 JWT
+当前步骤：3
+下一步：把三个视图函数切到新入口，删旧函数
+未落档：src/views/auth.py, src/views/user.py
+```
+
+That text is the `handoff` field; paste it straight into a new session. It also names the files that changed but haven't been recorded yet.
+
 ## Why not `git stash`, or just commit?
 
 | Approach | What it's missing |
@@ -374,14 +477,14 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 
 So the agent has to checkpoint after every completed step. That contract lives in `SKILL.md`, which you install into the agent's skill directory (see below). Without it you still get file rollback points, but nobody knows what you were doing or what's next.
 
-The shape of a task:
+Four rules:
 
-```
-tc_init    start a task
-tc_save    once per completed step (with conclusion and next)
-tc_resume  first call in a new session, to pick up where you left off
-tc_restore roll back (apply:false to preview, then apply:true)
-```
+1. Call `tc_init` before a long task, one name per task. An existing active task is **suspended, not closed**; use `tc_switch` to return to it.
+2. Call `tc_save` after every completed step, and **always fill in `conclusion` and `next`**. Without them the next session sees a pile of file paths and nothing else.
+3. In a new session, or after an interruption, **call `tc_resume` first**. Don't guess your progress from scratch.
+4. **Preview before rolling back**: `apply: false` to see the list, then `apply: true`.
+
+Step granularity: a unit you can describe as "done, and the conclusion is X". Too fine (one per file) drowns the signal; too coarse (one per task) loses the point of rolling back.
 
 ### Tools
 
