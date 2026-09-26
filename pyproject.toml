@@ -4,22 +4,51 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "task-checkpoint-mcp"
-version = "0.1.2"
-description = "长任务的步骤存档与回退：做一步、存一步，中断后能接上，做错了能退回"
+version = "0.1.3"
+description = "MCP server adding checkpoint and resume to long agent tasks: roll back to any step, resume in a new session, hand off to another machine. Pure Python stdlib, zero dependencies."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["mcp", "checkpoint", "rollback", "long-running-agent"]
+keywords = [
+  "mcp",
+  "mcp-server",
+  "model-context-protocol",
+  "checkpoint",
+  "rollback",
+  "resume",
+  "handoff",
+  "ai-agents",
+  "claude-code",
+  "session-management",
+  "long-running-agent",
+]
 classifiers = [
-  "Programming Language :: Python :: 3",
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
   "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 # 刻意不写 dependencies：只用标准库，装的时候不拉任何第三方包。
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/qddfxp/task-checkpoint-mcp"
+Repository = "https://github.com/qddfxp/task-checkpoint-mcp"
+Issues = "https://github.com/qddfxp/task-checkpoint-mcp/issues"
+Changelog = "https://github.com/qddfxp/task-checkpoint-mcp/releases"
+
 [project.scripts]
 tc-mcp = "tc_mcp:main"
+# 第二个入口点：MCP Registry 和 uvx 按「包名 = 命令名」找命令，
+# 只有 tc-mcp 的话 `uvx task-checkpoint-mcp` 会找不到可执行的命令。
+task-checkpoint-mcp = "tc_mcp:main"
 
 [tool.setuptools]
 # 源码保留在 scripts/ 下，不改造成包目录：

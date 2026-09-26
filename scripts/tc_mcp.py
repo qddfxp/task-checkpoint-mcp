@@ -59,6 +59,28 @@ def _text_content(text: str) -> dict:
 # MCP 处理
 # ============================================================
 
+def _server_version() -> str:
+    """报给客户端的版本号。
+
+    从源码目录直接跑时读同级的 pyproject.toml；装成包之后 pyproject 不在，
+    退回包元数据。两边都拿不到就报 unknown。
+
+    这里刻意不放硬编码的版本号：改 pyproject 忘了改这里的话，客户端看到的
+    版本就和实际包里的一致不了，而且没人会发现。
+    """
+    try:
+        import tomllib
+        text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+        return tomllib.loads(text)["project"]["version"]
+    except Exception:
+        pass
+    try:
+        from importlib.metadata import version
+        return version("task-checkpoint-mcp")
+    except Exception:
+        return "unknown"
+
+
 def handle_initialize(params: dict, req_id) -> dict:
     if not isinstance(params, dict):
         return _err(-32602, "initialize params must be an object", req_id)
@@ -70,7 +92,7 @@ def handle_initialize(params: dict, req_id) -> dict:
     return _ok({
         "protocolVersion": agreed,
         "capabilities": {"tools": {}},
-        "serverInfo": {"name": "task-checkpoint-mcp", "version": "0.1.2"},
+        "serverInfo": {"name": "task-checkpoint-mcp", "version": _server_version()},
     }, req_id)
 
 

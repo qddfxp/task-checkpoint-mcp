@@ -154,6 +154,21 @@ class TaskCheckpointRegressionTests(unittest.TestCase):
         self.assertIn("tc_import", names)
         self.assertEqual(len(names), 10)
 
+    def test_server_version_comes_from_pyproject(self):
+        """serverInfo 报的版本必须等于 pyproject 里的版本。
+
+        以前这里硬编码了一份，pyproject 升到 0.1.3 之后服务器还在自报 0.1.2，
+        客户端看到的版本和实际装的包对不上。
+        """
+        import tomllib
+
+        root = Path(__file__).resolve().parents[1]
+        declared = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+
+        self.assertEqual(tc_mcp._server_version(), declared)
+        info = tc_mcp.handle_initialize({"protocolVersion": "2025-06-18"}, 1)["result"]["serverInfo"]
+        self.assertEqual(info["version"], declared)
+
 
 if __name__ == "__main__":
     unittest.main()

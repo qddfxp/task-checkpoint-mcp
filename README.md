@@ -1,5 +1,6 @@
 # Task Checkpoint MCP
 
+[![PyPI](https://img.shields.io/pypi/v/task-checkpoint-mcp.svg)](https://pypi.org/project/task-checkpoint-mcp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](pyproject.toml)
@@ -14,7 +15,7 @@
 **一、装**
 
 ```bash
-pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+pipx install task-checkpoint-mcp
 ```
 
 **二、在客户端里接上**（Claude Code、Codex、Cursor 等都是同一段配置）
@@ -84,12 +85,18 @@ tc_restore 退回去（先 apply:false 预览，再 apply:true）
 ### 方式一：装成命令（推荐）
 
 ```bash
-pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+pipx install task-checkpoint-mcp
 # 或
-pip install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+pip install task-checkpoint-mcp
 ```
 
-装完在客户端里用 `tc-mcp` 启动：
+也可以直接从 git 装，跟着仓库走、不走 PyPI 的版本号：
+
+```bash
+pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+```
+
+装完在客户端里用 `tc-mcp` 启动。包里有两个等价的入口点：`tc-mcp` 和 `task-checkpoint-mcp`（后者是给 `uvx` 这类按包名找命令的 runner 用的）：
 
 ```json
 {
@@ -343,6 +350,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ├── LICENSE          MIT
 ├── pyproject.toml   打包配置，源码不改成包目录
 ├── MANIFEST.in      sdist 包含哪些文件
+├── server.json      官方 MCP Registry 的发布元数据
 ├── scripts/
 │   ├── tc.py        业务核心
 │   └── tc_mcp.py    stdio MCP 适配层
@@ -368,7 +376,7 @@ A stdio MCP server written in **pure Python standard library** — no third-part
 **1. Install**
 
 ```bash
-pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+pipx install task-checkpoint-mcp
 ```
 
 **2. Wire it into your client** (same block for Claude Code, Codex, Cursor and the rest)
@@ -434,15 +442,21 @@ Worth installing for multi-step coding or writing tasks that can get interrupted
 
 ## Install
 
-### Option 1 — install as a command (recommended)
+### Option 1 — from PyPI (recommended)
+
+```bash
+pipx install task-checkpoint-mcp
+# or
+pip install task-checkpoint-mcp
+```
+
+Or install straight from git, tracking the repo and skipping PyPI versioning:
 
 ```bash
 pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
-# or
-pip install "git+https://github.com/qddfxp/task-checkpoint-mcp"
 ```
 
-Then point your client at `tc-mcp`:
+Then point your client at `tc-mcp`. The package ships two equivalent entry points — `tc-mcp` and `task-checkpoint-mcp` (the latter for runners like `uvx` that look up a command by package name):
 
 ```json
 {
@@ -677,6 +691,7 @@ The active pointer and baseline indexes are scoped per workspace: when several w
 ├── LICENSE          MIT
 ├── pyproject.toml   packaging; sources stay in scripts/, not a package dir
 ├── MANIFEST.in      what goes into the sdist
+├── server.json      publish metadata for the official MCP Registry
 ├── scripts/
 │   ├── tc.py        core
 │   └── tc_mcp.py    stdio MCP adapter
@@ -690,3 +705,5 @@ The active pointer and baseline indexes are scoped per workspace: when several w
 Build artifacts stay out of the repo; official releases (wheel / sdist) live in GitHub Releases.
 
 Implementation notes for people changing this code (`.git/index` byte counts, ref collision behaviour, locking strategy, manifest anchoring) are in the Chinese section above.
+
+<!-- mcp-name: io.github.qddfxp/task-checkpoint-mcp -->
