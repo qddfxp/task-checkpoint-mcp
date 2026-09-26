@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "task-checkpoint-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "长任务的步骤存档与回退：做一步、存一步，中断后能接上，做错了能退回"
 readme = "README.md"
 requires-python = ">=3.10"

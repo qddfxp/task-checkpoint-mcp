@@ -43,6 +43,7 @@ description: 长任务的步骤存档与回退。多步任务开工前用 tc_ini
 | `tc_capture` | 想立刻记一次文件变化（不等后台） | `root` |
 | `tc_switch` | 回到之前挂起的任务 | `root`, `task_id` |
 | `tc_export` | 导出交接包给另一个目录 / 另一台机器 | `root`, `to` |
+| `tc_import` | 在另一个目录 / 机器上接续别人的交接包 | `root`, `package` |
 | `tc_compress` | 存档太大了，回收旧变更层空间 | `root` |
 
 `tc_save` 的完整参数：
@@ -109,7 +110,7 @@ tc_restore(root="...", drift_id="<上一步返回的 recovered>", apply=true)
 - 静默期最长约 60 秒：文件一直在写时，中间那条记录标 `partial: true`。
 - 进程如果突然死掉，最后那段改动要等下次 `tc_save`/`tc_capture` 补记；在这之前它只出现在 `tc_resume` 的未落档路径里。
 - **敏感文件**不存内容、连哈希都不存，只看得出 mtime 和 size 变了没有。判定看目录名和无歧义文件名（`.env`/`*.env`/`*.pem`/`*.key`/`*.p8`/`*_rsa`/`*_key`/`kubeconfig`/`*.tfstate`/`*.jwt`/`.npmrc`/`.pypirc`/`.pgpass`/`credentials*`/`secret*`/`token.json`/`auth.json`/`settings.py`/`wp-config.php`/.ssh/.aws/.kube/.secrets 等）；`*secret*`/`*password*`/`*credential*`/`*api_key*` 这类高歧义子串**只对配置类后缀**生效，所以 `src/password_policy.py`、`src/tokenizer.py` 不会被误拦。
-  这是**黑名单，盖不全**（两头都会漏）：凭据别放在被扫路径里；名字无辜的凭据（如 `config/database.yaml`）根本抓不到。
+  这是**黑名单，盖不全**（两头都会漏）：凭据别放在被扫路径里；名字无辜的凭据（如 `config/database.yaml`）根本抓不到。避不开时就在 `tc_init(exclude=[...])` 里把整个目录排掉（模式按单个名字段匹配，不接路径分隔符）。
 - 变更层（`tc_capture` / 后台线程）用 **mtime+size** 判变化：内容改了但 mtime 与长度都没变时，它会漏记；任务层 `tc_save` 默认按内容算 sha，不受此限。
 - 超过 100 MB 的文件只记元数据，不回退内容。
 - 回退会还原权限位，但不还原 mtime；**只改权限、内容没变时不会触发重写**，那种情况权限也回不去。

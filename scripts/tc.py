@@ -43,6 +43,30 @@ def _excluded(name: str, extra: set[str]) -> bool:
     return any(fnmatch.fnmatch(name, pat) for pat in DEFAULT_EXCLUDE | extra)
 
 
+def _clean_exclude(patterns) -> list[str]:
+    """校验调用方传入的 exclude 模式。
+
+    匹配方式和 DEFAULT_EXCLUDE 完全一致：按**单个名字段**做 fnmatch ——
+    目录名（任意层级），或路径的第一段。所以带路径分隔符的模式永远匹配不上，
+    那种情况直接报错，而不是让人以为加了却没生效。
+    """
+    if patterns is None:
+        return []
+    if not isinstance(patterns, (list, tuple)):
+        raise ValueError("exclude must be a list of glob patterns")
+    cleaned: list[str] = []
+    for item in patterns:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("exclude entries must be non-empty strings")
+        value = item.strip()
+        if "/" in value or "\\" in value:
+            raise ValueError(f"exclude pattern must be a single path segment: {value!r}")
+        if value in {".", ".."} or value.startswith("~"):
+            raise ValueError(f"unsafe exclude pattern: {value!r}")
+        cleaned.append(value)
+    return list(dict.fromkeys(cleaned))
+
+
 # 目录名黑名单：命中则整个目录内容都算敏感（与后缀无关）。
 SENSITIVE_DIRS = {".ssh", ".aws", ".gnupg", ".docker", ".kube",
                   ".env", ".envdir", ".secrets", ".tokens"}
@@ -259,7 +283,9 @@ class TaskCheckpoint:
         # 不能靠 _scan 隐式创建，否则单独调 _store_payloads 之类的路径会 AttributeError。
         self._health: list[str] = []
 
-    def init(self, root: str, name: str, store: Optional[str] = None, goal: str = "", constraints: str = "") -> dict:
+    def init(self, root: str, name: str, store: Optional[str] = None, goal: str = "",
+             constraints: str = "", exclude=None) -> dict:
+        patterns = _clean_exclude(exclude)
         root_p = Path(root).resolve()
         self.root = root_p
         marker = root_p / STORE_MARKER
@@ -292,7 +318,7 @@ class TaskCheckpoint:
                 "goal": goal, "constraints": constraints, "created_at": _now(),
                 "updated_at": _now(), "status": "open", "head": 0, "step_count": 0,
                 "drift_count": 0, "store": str(self.store), "groups": {},
-                "exclude": [], "companion_rules": dict(DEFAULT_COMPANION_RULES),
+                "exclude": list(patterns), "companion_rules": dict(DEFAULT_COMPANION_RULES),
             }
             self._write_state(state)
             self._write_active(task_id)
@@ -303,6 +329,7 @@ class TaskCheckpoint:
         return {
             "task_id": task_id, "name": name, "store": str(self.store),
             "store_is_external": not inside, "prev_suspended": suspended,
+            "exclude": list(patterns),
             "note": "store 在工作区内，工作区被删会一起丢；要放到外面请传 store" if inside else "store 在工作区外",
         }
 
@@ -701,7 +728,7 @@ class TaskCheckpoint:
     def _compress(self, keep_seconds: int, minimum: int, maximum: int) -> dict:
         state = self._active(allow_closed=True)
         protected = self._protected_hashes(state["task_id"])
-        drifts = self._drift_records(state["task_id"]) 
+        drifts = self._drift_records(state["task_id"])
         by_path: dict[str, list[dict]] = {}
         for record in drifts:
             if record["kind"] == "recovered":

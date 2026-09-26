@@ -1,6 +1,6 @@
 # Task Checkpoint MCP
 
-给长任务做“做一步、存一步”的存档：中断后新会话能接着做，做错了能退回任意一步。
+给长任务做"做一步、存一步"的存档：中断后新会话能接着做，做错了能退回任意一步。
 
 一个 stdio MCP 服务器，**只用 Python 标准库**，不装任何第三方包。
 
@@ -8,7 +8,7 @@
 
 | 做法 | 缺什么 |
 |---|---|
-| `git stash` | 一次性的，不能命名、不能跨会话交接，也没有“这一步在做什么、结论是什么” |
+| `git stash` | 一次性的，不能命名、不能跨会话交接，也没有"这一步在做什么、结论是什么" |
 | 随手一个 commit | 会污染真实历史；半成品未必允许 commit；还得你记得先 commit |
 | 手写进度笔记 | 和文件状态脱钩，回退时要自己对着时间线拼 |
 | **本工具** | 文件变化后台自动记（变更层），步骤语义由模型声明（任务层）；只额外加 `refs/checkpoints/...`，不动你的 git 历史 |
@@ -23,7 +23,7 @@
 - **不是 git 仓库也能用**，功能一样，只是少了那层 git 引用。
 - **不保存聊天记录**，只保存工作区文件和模型主动声明的步骤说明。
 - 存档默认写在工作区的 `.checkpoints/`；指定外部 `store` 时，工作区仅留一个不含文件内容的 `.task-checkpoint-store.json` 路径指针。
-- **敏感文件识别是路径黑名单，盖不全。** 别把凭据放在被扫路径里 —— 详见「使用限制」。
+- **敏感文件识别是路径黑名单，盖不全。** 别把凭据放在被扫路径里 —— 详见"使用限制"。
 
 ## 安装
 
@@ -66,9 +66,9 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 
 ## 怎么用
 
-**最重要的一条**：文件变化由后台线程自动记录，但“这一步在做什么、结论是什么、下一步干什么”只有模型主动调 `tc_save` 才会留下。
+**最重要的一条**：文件变化由后台线程自动记录，但"这一步在做什么、结论是什么、下一步干什么"只有模型主动调 `tc_save` 才会留下。
 
-所以要让 Agent 每完成一步就存一步 —— 这份约束写在 `SKILL.md` 里，得把它装进 Agent 的技能目录（见下面「把 SKILL.md 装进 Agent 的技能目录」）。不装它，文件回退点照常产生，但没人知道当初要干什么、下一步该干什么。
+所以要让 Agent 每完成一步就存一步 —— 这份约束写在 `SKILL.md` 里，得把它装进 Agent 的技能目录（见下面"把 SKILL.md 装进 Agent 的技能目录"）。不装它，文件回退点照常产生，但没人知道当初要干什么、下一步该干什么。
 
 典型流程：
 
@@ -81,7 +81,7 @@ tc_restore 退回去（先 apply:false 预览，再 apply:true）
 
 ### 工具
 
-9 个。第一个参数都是 `root`，指工作区目录（通常是当前项目的绝对路径）。
+10 个。第一个参数都是 `root`，指工作区目录（通常是当前项目的绝对路径）。
 
 | 工具 | 什么时候用 | 必填 |
 |---|---|---|
@@ -93,11 +93,12 @@ tc_restore 退回去（先 apply:false 预览，再 apply:true）
 | `tc_capture` | 想立刻记一次文件变化（不等后台线程） | `root` |
 | `tc_switch` | 回到之前挂起的任务 | `root`, `task_id` |
 | `tc_export` | 导出交接包给另一个目录 / 另一台机器 | `root`, `to` |
+| `tc_import` | 导入别人的交接包，在这里接续任务 | `root`, `package` |
 | `tc_compress` | 存档太大了，回收旧变更层空间 | `root` |
 
 `tc_save` 的完整参数：
 
-- `title`（必填）——这一步一句话标题，写“做了什么”，不写“改了什么”
+- `title`（必填）——这一步一句话标题，写"做了什么"，不写"改了什么"
 - `conclusion`——这一步的结论。**最有价值的字段**
 - `next`——下一步要干什么。**接续工作的关键**
 - `description`——为什么这么做（决策理由，事后没人记得）
@@ -106,6 +107,17 @@ tc_restore 退回去（先 apply:false 预览，再 apply:true）
 - `close: true`——收尾时用。关闭后不能再存档，但还能读
 
 回退操作本身也会被记成一条变更记录，返回里的 `recovered` 就是它的 `drift_id` —— 退错了可以再用它退回来。
+
+### 返回值里几个值得看的字段
+
+- `tc_resume.handoff` —— 一段现成的交接文本，可以直接粘给新会话；`drift_paths` 是工作区里**还没落档**的改动；`health.errors` 是存档自身的问题
+- `tc_save.idempotent` —— 同一步（标题、文件摘要、结论、下一步、已验证项都一样）重复存，不会产生重复步骤
+- `tc_save.active_task_changed` —— 传了别人的 `task_id` 时活动任务会被切过去（原任务变 suspended），这个字段就是在提示这件事
+- `tc_restore.recovered` —— 回退本身也会被记成一条变更记录，这就是它的 `drift_id`
+- `tc_restore.plan.unrestorable` / `skipped_paths` —— 目标里没能还原的文件；预览和执行给的是同一份清单
+- `tc_capture.waiting` / `partial` —— 还在静默期，以及中间那条不完整的记录
+- `tc_init.exclude` —— 回读你这次设进去的排除模式
+- `tc_export.path` —— 交接包目录，里面有一个 `HANDOFF.md`，是给接手方的提示词
 
 ## 把 SKILL.md 装进 Agent 的技能目录
 
@@ -116,8 +128,11 @@ tc_restore 退回去（先 apply:false 预览，再 apply:true）
 | 客户端 | 放这里 |
 |---|---|
 | Claude Code | `~/.claude/skills/task-checkpoint/SKILL.md` |
-| 多客户端共用的 agents 目录 | `~/.agents/skills/task-checkpoint/SKILL.md` |
+| Codex CLI | `~/.codex/skills/task-checkpoint/SKILL.md` |
 | ZCode | `~/.zcode/skills/task-checkpoint/SKILL.md` |
+| 跨客户端共用 | `~/.agents/skills/task-checkpoint/SKILL.md` |
+
+`~/.agents/skills/` 是多个客户端共用的技能目录；客户端专属目录优先于它 —— 同名技能以客户端专属目录里的那份为准。OpenCode 等其它客户端放到它自己文档里的技能目录即可，规则不变。
 
 ```bash
 mkdir -p ~/.claude/skills/task-checkpoint
@@ -134,7 +149,7 @@ Windows 路径形如 `C:\Users\<你>\.claude\skills\task-checkpoint\SKILL.md`。
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-最后一行是 `OK` 就对了。测试同样只用标准库（`unittest`），不需要 pytest。
+最后一行是 `OK` 就对了（整批约 30 秒）。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
 确认服务器能起来 —— 会回一行带 `serverInfo` 的 JSON：
 
@@ -153,8 +168,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | `TC_WATCH_INTERVAL` | `15` | 后台检查间隔（秒） |
 | `TC_DRIFT_MAX_WAIT` | `60` | 静默期上限（秒） |
 | `TC_GIT` | `on` | 设成 `off` 就完全不建 `refs/checkpoints/...` 引用 |
-| `TC_GIT_VERIFY` | `on` | 建引用前后对比 git 指纹，自证“没动过用户 git”。设成 `off` 跳过自证，每次 `tc_save` 少几趟 git 子进程；跳过后返回的 `git.unchanged` 是 `null` |
-| `TC_SHA_REUSE` | `off` | mtime+size 没变的文件不再重读、直接复用索引里的 sha。风险见「使用限制」 |
+| `TC_GIT_VERIFY` | `on` | 建引用前后对比 git 指纹，自证"没动过用户 git"。设成 `off` 跳过自证，每次 `tc_save` 少几趟 git 子进程；跳过后返回的 `git.unchanged` 是 `null` |
+| `TC_SHA_REUSE` | `off` | mtime+size 没变的文件不再重读、直接复用索引里的 sha。风险见"使用限制" |
 
 ## 使用限制
 
@@ -162,7 +177,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 敏感文件**不存内容、连哈希都不存**，只能看出 mtime 和 size 变了没有。判定按路径匹配，所以两头都会漏：
 
-- **漏判**：名字无辜的凭据抓不到。`config/database.yaml`、`docker-compose.yml`、`config.json` 会被当普通文件明文存进 `payload/`。**别把凭据放在被扫路径里**，或者用 `state.exclude` 自己加。
+- **漏判**：名字无辜的凭据抓不到。`config/database.yaml`、`docker-compose.yml`、`config.json` 会被当普通文件明文存进 `payload/`。**别把凭据放在被扫路径里**；避不开时用 `tc_init(exclude=[...])` 把整个目录排掉。
 - **误拦**：被误判为敏感的**源码**永远拿不到内容副本，回退时会静默跳过（只出现在 `plan.unrestorable` 里）。名单分两层就是为压低误拦。
 
 拦的范围：
@@ -180,6 +195,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
   - 子串：`*secret*` `*password*` `*passwd*` `*credential*` `*api_key*` `*apikey*` `*token*` `*auth_token*`
   - 后缀：`.json .yaml .yml .toml .ini .cfg .conf .config .properties .xml .txt .env .envrc .cnf .sh .ps1 .bat .cmd .sql .php`
   - 所以 `prod_credentials.json` 拦；`src/password_policy.py`、`src/tokenizer.py`、`docs/secrets.md` **不拦**。
+
+`exclude` 的匹配方式和内置名单一致：按**单个名字段**做 glob（目录名，或路径的第一段）。所以 `exclude=["config"]` 会排掉任意层级的 `config/` 目录，但**不能只排某个具体文件**（要排 `config/database.yaml` 就得连 `config/` 一起排）。带 `/` 的模式会被直接拒绝，不会静默失效。
 
 **这条能力不构成隐私保护或合规保证。** 存档目录的访问权限由你自己管；别把未排除的凭据、令牌、私钥、个人资料放进被扫路径。
 
@@ -206,7 +223,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ### 存档不会自动缩
 
-旧变更层的内容会一直留着，用 `tc_compress` 手动回收。它的默认参数是**保留 7 天**，所以小工作区上默认调用往往是 `converted: 0`（什么都没回收）—— 返回值里带 `keep_seconds` / `minimum` / `maximum` / `eligible` / `bytes_freed`，看得出“为什么没回收”。想真的清就用小一点的 `keep_seconds`（步骤基线和 `recovered` 层永远不动）。
+旧变更层的内容会一直留着，用 `tc_compress` 手动回收。它的默认参数是**保留 7 天**，所以小工作区上默认调用往往是 `converted: 0`（什么都没回收）—— 返回值里带 `keep_seconds` / `minimum` / `maximum` / `eligible` / `bytes_freed`，看得出"为什么没回收"。想真的清就用小一点的 `keep_seconds`（步骤基线和 `recovered` 层永远不动）。
 
 ### `TC_SHA_REUSE=on` 的风险（默认关的原因）
 
@@ -214,14 +231,14 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 开了 `TC_SHA_REUSE=on` 之后，mtime+size 没变的文件不再重读、直接复用索引里的 sha。遇到 mtime 被还原（`os.utime`）、文件系统 mtime 粒度粗（FAT、部分网络盘）、或有工具保留 mtime（`cp -p`、`rsync -t`、`tar -x`、部分生成器）时，内容改动会被**完全漏掉**：不读盘、不存新内容，却把旧 sha 记进步骤，回退时静默给出旧内容。默认关闭时这条路径不存在。
 
-`tc_resume` 和 `tc_show` 无论哪种模式都不读文件内容（只看 mtime+size），因此也可能漏掉“保留 mtime 的改动”。
+`tc_resume` 和 `tc_show` 无论哪种模式都不读文件内容（只看 mtime+size），因此也可能漏掉"保留 mtime 的改动"。
 
 ### 参数与状态约束
 
 - `tc_restore` 必须且只能传 `index` 或 `drift_id` 其中一个；`apply=true` 不允许修改已关闭任务。
 - `tc_save` 传了 `task_id`（而且不是当前活动任务）时，会**先把活动任务切过去**（原任务置为 suspended）再存这一步；返回值里的 `active_task_changed: true` 就是告诉你这件事发生了，想切回去用 `tc_switch`。
 - `tc_save` 在已有基线且检测到未落档变化时，会先把该变化挂到本次 save 的 manifest 上，再写任务步骤。
-- `tc_export` 的交接包导入会校验任务 id 和工作区路径，拒绝重复任务、`..` 穿越与符号链接目标；导入失败会撤销已写入的目标文件。
+- `tc_export` 要求目标父目录已存在；`tc_import` 会校验任务 id 和工作区路径，拒绝重复任务、`..` 穿越与符号链接目标；导入失败会撤销已写入的目标文件。
 - `store` 不得等于工作区根目录；自定义 `store` 位于工作区内时会被扫描器自动排除。
 
 ### git 相关
@@ -267,7 +284,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ├── scripts/
 │   ├── tc.py        业务核心
 │   └── tc_mcp.py    stdio MCP 适配层
-├── tests/
-│   └── test_tc.py   回归测试，只用 unittest
-└── dist/            构建产物（已 gitignore）；正式发行版在 GitHub Releases
+└── tests/
+    ├── test_tc.py                完整验收测试（回退安全、并发锁、git ref、返回字段与打包契约）
+    └── test_tc_regressions.py    针对已修缺陷的定向回归
 ```
+
+构建产物不进仓库；正式发行版（wheel / sdist）在 GitHub Releases。

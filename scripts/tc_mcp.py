@@ -25,7 +25,7 @@ from tc import TaskCheckpoint, get_logger, init_logger
 
 TOOLS = [
     "tc_init", "tc_switch", "tc_save", "tc_capture",
-    "tc_show", "tc_restore", "tc_resume", "tc_export", "tc_compress",
+    "tc_show", "tc_restore", "tc_resume", "tc_export", "tc_import", "tc_compress",
 ]
 
 MCP_VERSION_LATEST = "2025-06-18"
@@ -70,7 +70,7 @@ def handle_initialize(params: dict, req_id) -> dict:
     return _ok({
         "protocolVersion": agreed,
         "capabilities": {"tools": {}},
-        "serverInfo": {"name": "task-checkpoint-mcp", "version": "0.1.1"},
+        "serverInfo": {"name": "task-checkpoint-mcp", "version": "0.1.2"},
     }, req_id)
 
 
@@ -96,8 +96,8 @@ TOOL_SPECS = [
     {
         "name": "tc_init",
         "description": "创建任务。已有活动任务会挂起而不是关闭。",
-        "inputSchema": _schema({"root": ROOT, "name": _string("任务名"), "goal": _string("任务目标"), "constraints": _string("约束"), "store": _string("存档目录；省略时用工作区内 .checkpoints")}, ["root", "name"]),
-        "outputSchema": _schema({"task_id": _string("新任务 id"), "name": _string("任务名"), "store": _string("存档目录"), "store_is_external": {"type": "boolean"}, "prev_suspended": {"type": ["string", "null"]}, "note": _string("存档位置提示")}, ["task_id", "name", "store", "store_is_external", "note"]),
+        "inputSchema": _schema({"root": ROOT, "name": _string("任务名"), "goal": _string("任务目标"), "constraints": _string("约束"), "store": _string("存档目录；省略时用工作区内 .checkpoints"), "exclude": {"type": "array", "items": {"type": "string"}, "description": "额外的排除模式，按单个名字段匹配（目录名或路径第一段），如 [\"config\", \"*.local\"]"}}, ["root", "name"]),
+        "outputSchema": _schema({"task_id": _string("新任务 id"), "name": _string("任务名"), "store": _string("存档目录"), "store_is_external": {"type": "boolean"}, "prev_suspended": {"type": ["string", "null"]}, "exclude": {"type": "array", "items": {"type": "string"}}, "note": _string("存档位置提示")}, ["task_id", "name", "store", "store_is_external", "note"]),
     },
     {
         "name": "tc_switch",
@@ -140,6 +140,12 @@ TOOL_SPECS = [
         "description": "导出交接包到一个已存在的目录。敏感文件内容不会导出。",
         "inputSchema": _schema({"root": ROOT, "to": _string("已存在的导出父目录")}, ["root", "to"]),
         "outputSchema": _schema({"path": _string("交接包目录"), "filtered": {"type": "array"}, "files": {"type": "array"}}, ["path", "filtered"]),
+    },
+    {
+        "name": "tc_import",
+        "description": "导入 tc_export 生成的交接包，在另一个目录或机器上接续任务。会校验任务 id 与工作区路径，拒绝重复任务、.. 穿越与符号链接目标；失败时撤销已写入的文件。",
+        "inputSchema": _schema({"root": ROOT, "package": _string("交接包目录，即 tc_export 返回的 path")}, ["root", "package"]),
+        "outputSchema": _schema({"task_id": _string("导入后的任务 id")}, ["task_id"]),
     },
     {
         "name": "tc_compress",
@@ -234,7 +240,7 @@ def handle_tools_call(params: dict, req_id) -> dict:
         }))], is_error=True), req_id)
     except PermissionError as e:
         return _ok(_tool_result([_text_content(json.dumps({"error": str(e), "isError": True}))], is_error=True), req_id)
-    except (FileNotFoundError, RuntimeError) as e:
+    except (FileNotFoundError, FileExistsError, RuntimeError) as e:
         payload = {"error": str(e), "isError": True}
         return _ok(_tool_result([_text_content(json.dumps(payload, ensure_ascii=False))], True, payload), req_id)
     except Exception as e:
@@ -260,7 +266,8 @@ def dispatch_tool(name: str, args: dict) -> dict:
     if name == "tc_init":
         store = args.get("store")
         return api.init(root, args["name"], store=store,
-                        goal=args.get("goal", ""), constraints=args.get("constraints", ""))
+                        goal=args.get("goal", ""), constraints=args.get("constraints", ""),
+                        exclude=args.get("exclude"))
 
     if name == "tc_switch":
         return api.switch(root, args["task_id"])
@@ -298,6 +305,9 @@ def dispatch_tool(name: str, args: dict) -> dict:
 
     if name == "tc_export":
         return api.export(root, args["to"])
+
+    if name == "tc_import":
+        return api.import_handoff(args["package"], root)
 
     if name == "tc_compress":
         return api.compress(keep_seconds=int(args.get("keep_seconds", 7 * 24 * 3600)),
