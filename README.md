@@ -361,7 +361,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
     └── test_tc_regressions.py    针对已修缺陷的定向回归
 ```
 
-构建产物不进仓库；正式发行版（wheel / sdist）在 GitHub Releases。
+构建产物不进仓库。发布走两条：PyPI 上的 `task-checkpoint-mcp`（`pipx install task-checkpoint-mcp`）是主渠道，wheel 和 sdist 同时挂在 GitHub Releases 上。
 
 ---
 
@@ -702,7 +702,7 @@ The active pointer and baseline indexes are scoped per workspace: when several w
     └── test_tc_regressions.py    targeted regressions for fixed defects
 ```
 
-Build artifacts stay out of the repo; official releases (wheel / sdist) live in GitHub Releases.
+Build artifacts stay out of the repo. There are two release channels: `task-checkpoint-mcp` on PyPI (`pipx install task-checkpoint-mcp`) is the primary one, with the wheel and sdist also attached to GitHub Releases.
 
 Implementation notes for people changing this code (`.git/index` byte counts, ref collision behaviour, locking strategy, manifest anchoring) are in the Chinese section above.
 
