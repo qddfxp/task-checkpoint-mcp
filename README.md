@@ -151,11 +151,13 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 最后一行是 `OK` 就对了（整批约 30 秒）。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
-想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 130 MB 的重工作区、逐项核对“不动你 git”的承诺）：
+想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对“不动你 git”的承诺）：
 
 ```bash
 python tools/drill.py
 ```
+
+它跑完默认把场地删掉；想看场地就 `TC_DRILL_KEEP=1 python tools/drill.py`（演练有未通过项时也会自动保留，方便排查）。
 
 确认服务器能起来 —— 会回一行带 `serverInfo` 的 JSON：
 

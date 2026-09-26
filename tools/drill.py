@@ -9,17 +9,20 @@
 
     python tools/drill.py
 
-需要 `git` 在 PATH 上；会在临时目录里建约 130 MB 的场地（一个 25 MB 随机文件 +
-一个 105 MB 稀疏文件）并**保留**该目录供事后查看。Windows 上没有符号链接权限时，
-那一步会被跳过，而不是让整场演练失败。
+需要 `git` 在 PATH 上；会在临时目录里建约 190 MB 的场地（一个 25 MB 随机文件 +
+一个 105 MB 稀疏文件）。**跑完默认就把场地删掉**——留着会攒垃圾（实际发现过三个月
+攒下 3.4 GB / 20 个场地）。想看场地就设 `TC_DRILL_KEEP=1`；演练有未通过项时也会
+自动保留。Windows 上没有符号链接权限时，那一步会被跳过，而不是让整场演练失败。
 
 默认把本仓库当作那个"真实项目"拷进场地；想换成别的项目，把 `TC_DRILL_SOURCE`
 指向它即可。
 """
 import hashlib
+import inspect
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -32,6 +35,21 @@ DRILL = Path(tempfile.mkdtemp(prefix="tc-drill-"))
 WS = DRILL / "workspace"
 
 FAIL = []
+KEEP = os.environ.get("TC_DRILL_KEEP", "").strip().lower() in {"1", "on", "true", "yes"}
+
+
+def _force_remove(func, target, _exc):
+    """Windows 上 git object 是只读的，shutil.rmtree 删不掉；去掉只读位再重试。"""
+    os.chmod(target, stat.S_IWRITE)
+    func(target)
+
+
+def remove_tree(path) -> None:
+    """删目录树，兼容旧版本的 rmtree 回调参数（3.12 起是 onexc，之前是 onerror）。"""
+    if "onexc" in inspect.signature(shutil.rmtree).parameters:
+        shutil.rmtree(path, onexc=_force_remove)
+    else:
+        shutil.rmtree(path, onerror=_force_remove)
 
 
 def check(label, ok, detail=""):
@@ -306,7 +324,22 @@ def main():
             print("  -", f)
     else:
         print("演练结果：全部通过")
-    print(f"场地保留在 {DRILL}（如需查看）")
+
+    # 场地默认不留：每次约 190 MB / 1300+ 文件，攒起来就是几 GB。
+    # 想留着查看用 TC_DRILL_KEEP=1；演练失败时也保留，方便事后排查。
+    for srv in (s, s2, s3):
+        if srv.p.poll() is None:
+            srv.kill()
+    if KEEP or FAIL:
+        why = "TC_DRILL_KEEP 要求保留" if KEEP else "演练有未通过项，保留现场便于排查"
+        print(f"场地保留在 {DRILL}（{why}）")
+    else:
+        try:
+            remove_tree(DRILL)
+        except OSError as exc:
+            print(f"场地清理失败（{type(exc).__name__}: {exc}），手动删：{DRILL}")
+        else:
+            print(f"场地已清理：{DRILL}")
     print("=" * 78)
     return 1 if FAIL else 0
 
