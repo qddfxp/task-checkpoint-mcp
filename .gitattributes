@@ -1,0 +1,4 @@
+# 仓库里的文本一律 LF。
+# 本机 git 的 core.autocrlf 是 true，会把 checkout 出来的文件写成 CRLF ——
+# npm/cli.js 换了 CRLF 之后，Unix 上的 `#!/usr/bin/env node` 会失效。
+* text=auto eol=lf
