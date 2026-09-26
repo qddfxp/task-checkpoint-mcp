@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,6 +9,7 @@ description = "长任务的步骤存档与回退：做一步、存一步，中�
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["mcp", "checkpoint", "rollback", "long-running-agent"]
 classifiers = [
   "Programming Language :: Python :: 3",
