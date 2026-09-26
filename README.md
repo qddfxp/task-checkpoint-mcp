@@ -149,9 +149,9 @@ Windows 路径形如 `C:\Users\<你>\.claude\skills\task-checkpoint\SKILL.md`。
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-最后一行是 `OK` 就对了（整批约 30 秒）。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
+最后一行是 `OK` 就对了。117 个用例整批约 5 分钟 —— 本机 Windows 实测 340 秒，开销集中在 git 子进程（`refs/checkpoints/` 相关的用例占约一分钟）和静默期等待，所以磁盘和 git 的速度对总时长影响很大。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
-想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对“不动你 git”的承诺）：
+想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对"不动你 git"的承诺）：
 
 ```bash
 python tools/drill.py
@@ -300,3 +300,290 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ```
 
 构建产物不进仓库；正式发行版（wheel / sdist）在 GitHub Releases。
+
+---
+
+# Task Checkpoint MCP (English)
+
+Checkpoint and resume for long agent tasks: save each step as you go, pick the work back up in a new session, roll back to any earlier step.
+
+A stdio MCP server written in **pure Python standard library** — no third-party packages. Python 3.10+.
+
+## Why not `git stash`, or just commit?
+
+| Approach | What it's missing |
+|---|---|
+| `git stash` | One-shot: no name, no cross-session handoff, and nothing about *what this step was* or *what it concluded* |
+| A quick commit | Pollutes real history; half-finished work isn't always committable; you have to remember to commit first |
+| A hand-written progress note | Decoupled from file state — rolling back means reconciling it against a timeline by hand |
+| **This tool** | A background thread records file changes (drift layer); the model declares step semantics (task layer). It only adds `refs/checkpoints/...` and never touches your git history |
+
+Worth installing for multi-step coding or writing tasks that can get interrupted and need to be reversible. Not worth it for changes you'll finish in one sitting with no rollback or handoff need.
+
+## Before you install
+
+- Python 3.10 or newer, standard library only.
+- **Your git history is untouched**: no commit, reset, clean, branch or HEAD changes. It only adds `refs/checkpoints/...` refs.
+- **Works outside a git repo too** — same features, minus that ref layer.
+- **No chat logs are stored** — only workspace files and the step notes the model declares.
+- The store defaults to `<workspace>/.checkpoints/`. With an external `store`, the workspace keeps only a `.task-checkpoint-store.json` path pointer containing no file contents.
+- **Sensitive-file detection is a path blacklist and does not cover everything.** Keep credentials out of scanned paths — see Limits.
+
+## Install
+
+### Option 1 — install as a command (recommended)
+
+```bash
+pipx install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+# or
+pip install "git+https://github.com/qddfxp/task-checkpoint-mcp"
+```
+
+Then point your client at `tc-mcp`:
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": { "command": "tc-mcp", "args": [] }
+  }
+}
+```
+
+### Option 2 — run from source (nothing to install)
+
+```bash
+git clone https://github.com/qddfxp/task-checkpoint-mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": {
+      "command": "/absolute/path/to/python",
+      "args": ["/absolute/path/to/task-checkpoint-mcp/scripts/tc_mcp.py"]
+    }
+  }
+}
+```
+
+`command` must be the **absolute path** to the interpreter, not bare `python` — the client may not resolve the one you meant. Once installed you can also use `python -m tc_mcp`.
+
+## Usage
+
+**The one rule that matters**: file changes are recorded automatically by the background thread, but "what this step was, what it concluded, what comes next" only exists if the model calls `tc_save`.
+
+So the agent has to checkpoint after every completed step. That contract lives in `SKILL.md`, which you install into the agent's skill directory (see below). Without it you still get file rollback points, but nobody knows what you were doing or what's next.
+
+The shape of a task:
+
+```
+tc_init    start a task
+tc_save    once per completed step (with conclusion and next)
+tc_resume  first call in a new session, to pick up where you left off
+tc_restore roll back (apply:false to preview, then apply:true)
+```
+
+### Tools
+
+Ten. Every one takes `root` first — the workspace directory (usually the absolute path of the project).
+
+| Tool | When to use | Required |
+|---|---|---|
+| `tc_init` | Starting a long task. An existing active task gets suspended, not closed | `root`, `name` |
+| `tc_save` | **After every completed step** | `root`, `title` |
+| `tc_resume` | **Start of a new session**, or taking over interrupted work (read-only) | `root` |
+| `tc_show` | Inspect steps / drift records | `root` |
+| `tc_restore` | Roll back to a step or drift record. Preview before applying | `root`, plus `index` or `drift_id` |
+| `tc_capture` | Force a file-change capture now, without waiting for the thread | `root` |
+| `tc_switch` | Return to a previously suspended task | `root`, `task_id` |
+| `tc_export` | Export a handoff package to another directory / machine | `root`, `to` |
+| `tc_import` | Import someone's handoff package and continue here | `root`, `package` |
+| `tc_compress` | Reclaim space from old drift layers | `root` |
+
+`tc_save` fields:
+
+- `title` (required) — one line about what you *did*, not what you changed
+- `conclusion` — what this step concluded. **The most valuable field**
+- `next` — what to do next. **What makes the work resumable**
+- `description` — why you did it (the reasoning nobody remembers later)
+- `verified` — what you actually ran and confirmed
+- `open_questions` — unresolved questions to hand forward
+- `close: true` — to finish a task. Closed tasks can still be read
+
+A rollback is itself recorded as a drift entry; the returned `recovered` is its `drift_id`, so **a mistaken rollback can be rolled back**.
+
+### Response fields worth reading
+
+- `tc_resume.handoff` — ready-made handoff text you can paste straight into a new session; `drift_paths` are changes on disk **not yet recorded**; `health.errors` are problems with the store itself
+- `tc_save.idempotent` — saving the same step again (same title, file digest, conclusion, next, verified) won't duplicate it
+- `tc_save.active_task_changed` — passing another task's `task_id` switches the active task (the old one becomes suspended); this field tells you it happened
+- `tc_restore.recovered` — the rollback's own `drift_id`
+- `tc_restore.plan.unrestorable` / `skipped_paths` — files that couldn't be restored; preview and execution use the same list
+- `tc_capture.waiting` / `partial` — still inside the quiet period, and the incomplete intermediate record
+- `tc_init.exclude` — echoes back the exclusion patterns you set
+- `tc_export.path` — the package directory, containing a `HANDOFF.md` prompt for whoever picks the work up
+
+## Install SKILL.md into the agent's skill directory
+
+`SKILL.md` is the other half of this project, not optional documentation: **the MCP server does the storing, `SKILL.md` is what makes the model actually call `tc_save` after each step.**
+
+Copy it into a directory your client scans; the directory name is the skill name.
+
+| Client | Path |
+|---|---|
+| Claude Code | `~/.claude/skills/task-checkpoint/SKILL.md` |
+| Codex CLI | `~/.codex/skills/task-checkpoint/SKILL.md` |
+| ZCode | `~/.zcode/skills/task-checkpoint/SKILL.md` |
+| Shared across clients | `~/.agents/skills/task-checkpoint/SKILL.md` |
+
+`~/.agents/skills/` is shared by several clients; a client-specific directory takes precedence over it when the same skill name exists in both. For OpenCode and others, use the skill directory documented by that client — the rule is unchanged.
+
+```bash
+mkdir -p ~/.claude/skills/task-checkpoint
+cp SKILL.md ~/.claude/skills/task-checkpoint/SKILL.md
+```
+
+On Windows the path looks like `C:\Users\<you>\.claude\skills\task-checkpoint\SKILL.md`. Clients may scan different directories — check their docs. The only requirement is that the file lands at `<skill-dir>/<skill-name>/SKILL.md`. Restart the client for it to take effect.
+
+## Verify (optional)
+
+Run the regression suite inside a cloned repo:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+The last line should be `OK`. All 117 tests take about 5 minutes — 340 s measured on Windows, with the cost concentrated in git subprocesses (the `refs/checkpoints/` cases account for roughly a minute) and quiet-period waits, so disk and git speed matter a lot. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the one packaging-contract check that reads `pyproject.toml` is skipped there because `tomllib` is 3.11+.
+
+For an end-to-end drill on a real workspace (spawns a real MCP subprocess, kills it mid-flight, builds a ~190 MB heavy workspace, and verifies the "your git is untouched" promise item by item):
+
+```bash
+python tools/drill.py
+```
+
+It deletes the workspace when it finishes; use `TC_DRILL_KEEP=1 python tools/drill.py` to keep it (it's also kept automatically when the drill has failures, to help diagnose).
+
+Confirm the server starts — it answers with one JSON line containing `serverInfo`:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' | python scripts/tc_mcp.py
+```
+
+A pip-installed copy has no `scripts/`; use `python -m tc_mcp` instead.
+
+## Environment variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TC_STORE` | `<workspace>/.checkpoints` | Store directory |
+| `TC_WATCH` | `on` | `off` disables the background recorder |
+| `TC_WATCH_INTERVAL` | `15` | Background poll interval (seconds) |
+| `TC_DRIFT_MAX_WAIT` | `60` | Quiet-period ceiling (seconds) |
+| `TC_GIT` | `on` | `off` stops creating `refs/checkpoints/...` entirely |
+| `TC_GIT_VERIFY` | `on` | Fingerprints git before and after to prove your repo was untouched. `off` saves a few git subprocesses per `tc_save`; `git.unchanged` then returns `null` |
+| `TC_SHA_REUSE` | `off` | Reuse the indexed sha when mtime+size are unchanged, instead of re-reading. See Limits for the risk |
+
+## Limits
+
+### Sensitive files: a blacklist that doesn't cover everything
+
+Sensitive files store **neither content nor hash** — only whether mtime and size changed. Detection matches on paths, so it fails in both directions:
+
+- **False negatives**: credentials with innocent names are not caught. `config/database.yaml`, `docker-compose.yml`, `config.json` get stored as plaintext in `payload/`. **Keep credentials out of scanned paths**; if you can't, use `tc_init(exclude=[...])` to exclude whole directories.
+- **False positives**: source files misclassified as sensitive never get a content copy, so a rollback silently skips them (they only show up in `plan.unrestorable`). That's why the list is two-tiered.
+
+What's blocked:
+
+- **Directory names** (the whole directory): `.ssh` `.aws` `.gnupg` `.docker` `.kube` `.env` `.envdir` `.secrets` `.tokens`, or any directory whose name contains `secret` / `credential` / `token`.
+- **Unambiguous filenames**: `.env` `.env.*` `*.env` `*.envrc`; `*.pem` `*.key` `*.p12` `*.pfx` `*.p8` `*.jks` `*.keystore` `*.kdbx` `*.ppk` `*.ovpn` `*_rsa` `*_dsa` `*_ed25519` `*_ecdsa` `*_key`; `.netrc` `.git-credentials` `.npmrc` `.pypirc` `.pgpass` `.htpasswd` `.my.cnf` `my.cnf` `passwd` `shadow`; `kubeconfig` `*.kubeconfig` `*.tfstate` `terraform.tfvars` `*.tfvars` `*.jwt`; `credentials*` `creds*` `secret*` `secrets.json` `token` `token.json` `token.txt` `*.token` `*_token` `auth.json`; `settings.py` `local_settings.py` `settings.xml` `wp-config.php` `web.config` `wrangler.toml` `.dev.vars`.
+- **Ambiguous substrings** (`*secret*` `*password*` `*passwd*` `*credential*` `*api_key*` `*apikey*` `*token*` `*auth_token*`): blocked only when the filename ends in a config-type suffix — `.json` `.yaml` `.yml` `.toml` `.ini` `.cfg` `.conf` `.config` `.properties` `.xml` `.txt` `.env` `.envrc` `.cnf` `.sh` `.ps1` `.bat` `.cmd` `.sql` `.php`. So `prod_credentials.json` is blocked, while `src/password_policy.py`, `src/tokenizer.py` and `docs/secrets.md` are not.
+
+`exclude` patterns follow the same rule: a glob against a **single name segment** (a directory name, or the first segment of a path). `exclude=["config"]` excludes a `config/` directory at any depth, but you **cannot** exclude one specific file — excluding `config/database.yaml` means excluding `config/` entirely. Patterns containing `/` are rejected outright rather than silently ignored.
+
+**This is not privacy protection or a compliance guarantee.** You manage the store's access permissions; don't leave unexcluded credentials, tokens, private keys or personal data inside scanned paths.
+
+### Timing and granularity
+
+- The quiet period is up to ~60 s. While a file keeps changing, the intermediate record is marked `partial: true`.
+- If the process dies abruptly, the tail of your changes appears only in `tc_resume`'s not-yet-recorded paths until the next `tc_save` / `tc_capture`.
+
+### The drift layer only looks at mtime+size
+
+`tc_capture` and the background thread detect change by **mtime+size**. If content changed but mtime and length did not (`cp -p`, `rsync -t`, `tar -x` preserve mtime), it **won't see a change**.
+
+`tc_save` hashes content by default and isn't affected — except under `TC_SHA_REUSE=on`, which pulls the task layer onto the same test.
+
+### Rollback
+
+- Restores permission bits (the POSIX executable bit) but **not mtime** — writing old timestamps back makes make-like tools think nothing changed. Note: a permissions-only change with identical content doesn't trigger a rewrite, so in that case the bits stay put.
+- Files that **cannot be restored are skipped** (sensitive, >100 MB with no stored content, payload lost) while the rest proceed; skipped paths come back in `plan.unrestorable`. Preview and execution use the same list, so one `.env` doesn't fail a whole rollback.
+- Binaries restore but get no line-level diff. Concurrent edits are not merged.
+
+### Large files
+
+Files up to 100 MB are stored verbatim in `payload/`, deduped by content. Above 100 MB only a streaming hash and metadata are kept — **no content, so no content rollback**.
+
+### The store never shrinks on its own
+
+Old drift content stays until you call `tc_compress`. Its default is **keep 7 days**, so on a small workspace a default call often reports `converted: 0` — `keep_seconds` / `minimum` / `maximum` / `eligible` / `bytes_freed` in the response explain why. Pass a smaller `keep_seconds` to actually reclaim. Step baselines and the `recovered` layer are never touched.
+
+### Risk of `TC_SHA_REUSE=on` (why it defaults off)
+
+By default the task layer hashes content on every save — it doesn't trust mtime — so one save reads every non-sensitive file in the workspace (no content is retained, so memory doesn't scale with workspace size).
+
+With `TC_SHA_REUSE=on`, files whose mtime+size are unchanged are not re-read and the indexed sha is reused. When mtime has been restored (`os.utime`), when the filesystem's mtime granularity is coarse (FAT, some network drives), or when a tool preserves mtime (`cp -p`, `rsync -t`, `tar -x`, some generators), content edits are **missed entirely**: nothing is read, nothing new is stored, the stale sha lands in the step record, and rollback silently returns old content. That path does not exist with the default.
+
+`tc_resume` and `tc_show` never read file contents in either mode (mtime+size only), so they can also miss mtime-preserving edits.
+
+### Argument and state constraints
+
+- `tc_restore` takes exactly one of `index` or `drift_id`; `apply=true` refuses to modify a closed task.
+- Passing another task's `task_id` to `tc_save` **switches the active task first** (the old one becomes suspended); `active_task_changed: true` tells you so. Use `tc_switch` to go back.
+- If a baseline exists and unrecorded changes are detected, `tc_save` attaches them to that save's manifest before writing the step.
+- `tc_export` requires the destination parent directory to exist; `tc_import` validates task id and workspace path, rejecting duplicate tasks, `..` traversal and symlink targets, and rolls back written files on failure.
+- `store` may not equal the workspace root; a custom `store` inside the workspace is excluded from scanning automatically.
+
+### git
+
+Inside a git repo each `tc_save` costs a few hundred extra milliseconds (git subprocesses to create the ref). Avoid it with `TC_GIT=off` or `TC_GIT_VERIFY=off`.
+
+## Storage layout
+
+```
+<workspace>/.checkpoints/
+├── current.json          active-task pointer, keyed by workspace root (one store can serve many)
+├── state.lock            concurrency lock
+├── server.log            logs (never stdout; stdout carries MCP frames only)
+├── payload/<sha2>/       content-addressed file copies, deduped by sha across tasks
+└── tasks/<task_id>/
+    ├── state.json
+    ├── index.json            baseline index: mtime/size/sha256 per file
+    ├── steps/sNNNN.json      task layer: one record per step
+    ├── drifts/dNNNN.json     drift layer: file changes
+    └── manifest/mNNNN.json   consistency manifests (incremental chain, full anchor every 20)
+```
+
+The active pointer and baseline indexes are scoped per workspace: when several workspaces share one `store`, they don't leak into each other.
+
+## Repository layout
+
+```
+.
+├── README.md        this file
+├── SKILL.md         the agent-facing usage contract (part of the feature)
+├── LICENSE          MIT
+├── pyproject.toml   packaging; sources stay in scripts/, not a package dir
+├── MANIFEST.in      what goes into the sdist
+├── scripts/
+│   ├── tc.py        core
+│   └── tc_mcp.py    stdio MCP adapter
+├── tools/
+│   └── drill.py     end-to-end probe against a real workspace (not in the test suite, run by hand)
+└── tests/
+    ├── test_tc.py                full acceptance suite (rollback safety, concurrency lock, git refs, return fields, packaging contract)
+    └── test_tc_regressions.py    targeted regressions for fixed defects
+```
+
+Build artifacts stay out of the repo; official releases (wheel / sdist) live in GitHub Releases.
+
+Implementation notes for people changing this code (`.git/index` byte counts, ref collision behaviour, locking strategy, manifest anchoring) are in the Chinese section above.
