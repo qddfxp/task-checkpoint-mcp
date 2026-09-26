@@ -1,0 +1,4 @@
+include README.md
+include SKILL.md
+recursive-include scripts *.py
+recursive-include tests *.py

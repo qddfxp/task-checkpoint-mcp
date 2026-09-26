@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "task-checkpoint-mcp"
+version = "0.1.1"
+description = "长任务的步骤存档与回退：做一步、存一步，中断后能接上，做错了能退回"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["mcp", "checkpoint", "rollback", "long-running-agent"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+# 刻意不写 dependencies：只用标准库，装的时候不拉任何第三方包。
+dependencies = []
+
+[project.scripts]
+tc-mcp = "tc_mcp:main"
+
+[tool.setuptools]
+# 源码保留在 scripts/ 下，不改造成包目录：
+# 空字符串这个键把"顶层模块"的搜索路径指向 scripts/，
+# 于是下面两个顶层模块正好落在 scripts/tc.py 和 scripts/tc_mcp.py。
+package-dir = { "" = "scripts" }
+py-modules = ["tc", "tc_mcp"]
