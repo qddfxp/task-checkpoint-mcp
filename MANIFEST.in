@@ -3,3 +3,4 @@ include SKILL.md
 include LICENSE
 recursive-include scripts *.py
 recursive-include tests *.py
+recursive-include tools *.py

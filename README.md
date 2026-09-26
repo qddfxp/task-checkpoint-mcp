@@ -151,6 +151,12 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 最后一行是 `OK` 就对了（整批约 30 秒）。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
+想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 130 MB 的重工作区、逐项核对“不动你 git”的承诺）：
+
+```bash
+python tools/drill.py
+```
+
 确认服务器能起来 —— 会回一行带 `serverInfo` 的 JSON：
 
 ```bash
@@ -284,6 +290,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ├── scripts/
 │   ├── tc.py        业务核心
 │   └── tc_mcp.py    stdio MCP 适配层
+├── tools/
+│   └── drill.py     真机端到端演练探针（不进测试套件，手动跑）
 └── tests/
     ├── test_tc.py                完整验收测试（回退安全、并发锁、git ref、返回字段与打包契约）
     └── test_tc_regressions.py    针对已修缺陷的定向回归
