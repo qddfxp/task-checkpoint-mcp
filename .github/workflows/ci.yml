@@ -32,6 +32,9 @@ jobs:
       - name: Acceptance suite
         run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Zero dependencies is a promise, not a slogan
+        # 3.10 没有 tomllib，这条只能在 3.11+ 上跑；套件里的
+        # Phase4Packaging.test_pyproject_matches_the_module_contract 覆盖同一件事
+        if: matrix.python != '3.10'
         run: python -c "import tomllib,sys; d=tomllib.load(open('pyproject.toml','rb')); print('dependencies =', d['project']['dependencies']); sys.exit(1 if d['project']['dependencies'] else 0)"
 
   artifacts:
