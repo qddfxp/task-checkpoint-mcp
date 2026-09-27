@@ -162,7 +162,10 @@ class TaskCheckpointRegressionTests(unittest.TestCase):
         以前这里硬编码了一份，pyproject 升到 0.1.3 之后服务器还在自报 0.1.2，
         客户端看到的版本和实际装的包对不上。
         """
-        import tomllib
+        try:
+            import tomllib
+        except ModuleNotFoundError:  # 3.10 没有 tomllib；服务器本体仍支持 3.10
+            self.skipTest("tomllib 需要 Python 3.11+")
 
         root = Path(__file__).resolve().parents[1]
         declared = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]

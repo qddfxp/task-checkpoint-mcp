@@ -718,13 +718,18 @@ class ReviewFixes(unittest.TestCase):
 
         root = str(self.root)
         store = self.root / ".checkpoints"
-        TaskCheckpoint(root)._write_active("t1")
-        # 必须清掉别的测试留下的 root：_watch_once() 遍历 tc._WATCH 里的**全部**
-        # root，残留 N 个就会把每行同样的内容重复写 N 遍，而这个测试断言的是
-        # 精确行数。不清的话它在"前面某个测试碰过 _WATCH"的机器上会假失败。
+        api = TaskCheckpoint(root)
+        api._write_active("t1")
+        # TaskCheckpoint 构造时会把**解析后的路径**注册进 tc._WATCH。自己拼字符串
+        # 拼不出同一个 key —— Windows 上 resolve() 会换大小写/短名，拼错就多出
+        # 一个 root，而 _watch_once() 遍历 tc._WATCH 里的全部 root，于是每行都会
+        # 重复写一遍，精确行数断言就假失败。所以按路径选出真实那个 key。
+        own = [k for k in tc._WATCH if Path(k).resolve() == Path(root).resolve()]
+        self.assertEqual(len(own), 1, f"本工作区在 _WATCH 里的 key 不唯一：{tc._WATCH}")
+        key = own[0]
         saved_watch = dict(tc._WATCH)
         tc._WATCH.clear()
-        tc._WATCH[root] = {"root": root, "store": str(store)}
+        tc._WATCH[key] = {"root": key, "store": str(store)}
         tc_mcp._WATCH_ERRORS.clear()
         original = tc.TaskCheckpoint.tick
         bursts = [
@@ -886,7 +891,9 @@ class ProtocolSmoke(unittest.TestCase):
             time.sleep(0.8)
             process.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "ping"}) + "\n")
             process.stdin.flush()
-            process.stdin.close()
+            # 不要手动 close stdin 再 communicate()：Python 3.10 的 communicate()
+            # 会去 flush stdin，而流已经被关掉，直接 ValueError: I/O operation on
+            # closed file。交给 communicate() 自己关，它关完就送 EOF。
             stdout, stderr = process.communicate(timeout=10)
             self.assertNotIn("tc' is not defined", stderr)
             ids = [json.loads(line).get("id") for line in stdout.splitlines() if line.strip()]
