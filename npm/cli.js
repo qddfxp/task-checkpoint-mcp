@@ -6,6 +6,35 @@ const { spawn, spawnSync } = require('node:child_process');
 // 这个包只是启动器：服务器本体是 Python，只用标准库。
 // 找得到装了 tc_mcp 的解释器就透传 stdio 跑起来，找不到就说清楚怎么装。
 
+// 自己的开关要在探测 Python 之前处理：没装 Python 也该能看帮助和版本号。
+const OWN_VERSION = require('./package.json').version;
+const USAGE = `task-checkpoint-mcp (npm launcher) v${OWN_VERSION}
+
+这个 npm 包只是启动器。服务器本体是纯标准库的 Python 包：
+
+    pipx install task-checkpoint-mcp
+
+用法：
+    npx -y task-checkpoint-mcp            找到 Python 后透传 stdio（客户端这么用）
+    npx -y task-checkpoint-mcp --help     这段说明
+    npx -y task-checkpoint-mcp --version  启动器自己的版本号
+
+其它参数会被透传给 Python 服务器（例如 --install-skill <目录>）。
+Python 装在非默认位置时，用 TC_PYTHON 指向它。
+
+文档：https://github.com/qddfxp/task-checkpoint-mcp
+`;
+
+const argv = process.argv.slice(2);
+if (argv.includes('--help') || argv.includes('-h')) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+if (argv.includes('--version') || argv.includes('-V')) {
+  process.stdout.write(OWN_VERSION + '\n');
+  process.exit(0);
+}
+
 const CANDIDATES = process.platform === 'win32'
   ? [['python'], ['py', '-3'], ['python3']]
   : [['python3'], ['python']];
@@ -43,7 +72,8 @@ if (!chosen) {
   process.exit(1);
 }
 
-const child = spawn(chosen.cmd, [...chosen.args, '-m', 'tc_mcp'], { stdio: 'inherit' });
+// 其余参数透传给 Python 服务器，这样 --install-skill / --print-skill 也能走这条壳
+const child = spawn(chosen.cmd, [...chosen.args, '-m', 'tc_mcp', ...argv], { stdio: 'inherit' });
 
 child.on('error', (error) => {
   process.stderr.write(`task-checkpoint-mcp: 启动 ${chosen.cmd} 失败：${error.message}\n`);

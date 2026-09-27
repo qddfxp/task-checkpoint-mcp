@@ -388,7 +388,113 @@ def _force_utf8_streams() -> None:
             pass
 
 
-def main():
+SKILL_PACKAGE_DIR = Path("share") / "task-checkpoint-mcp"
+
+USAGE = """\
+task-checkpoint-mcp —— 长任务的步骤存档与回退（stdio MCP 服务器）
+
+不带参数启动时按 MCP 协议读 stdin / 写 stdout，这是客户端用的方式。
+下面这些开关是给人用的：
+
+  --print-skill            把 SKILL.md 打到 stdout
+  --skill-path             打印 SKILL.md 的路径（配合 cp 用）
+  --install-skill <目录>    把 SKILL.md 写进 <目录>/SKILL.md（已存在时报错）
+      --force              配合 --install-skill，允许覆盖
+  --version                打印版本号
+  -h, --help               打印这段说明
+
+SKILL.md 是功能的一半：MCP 服务器负责存取，它负责让模型每完成一步
+真的去调 tc_save。装进客户端扫描的技能目录才生效，例如：
+
+  tc-mcp --install-skill ~/.claude/skills/task-checkpoint
+"""
+
+
+def _skill_md_path() -> Path:
+    """SKILL.md 在哪。
+
+    装成包时它是包数据，落在 <data>/share/task-checkpoint-mcp/SKILL.md；
+    从源码目录直接跑时就在仓库根目录。两边都找不到才算错。
+    """
+    candidates: list[Path] = []
+    try:
+        import sysconfig
+        data = sysconfig.get_path("data")
+        if data:
+            candidates.append(Path(data) / SKILL_PACKAGE_DIR / "SKILL.md")
+    except Exception:
+        pass
+    candidates.append(Path(sys.prefix) / SKILL_PACKAGE_DIR / "SKILL.md")
+    candidates.append(Path(__file__).resolve().parent.parent / "SKILL.md")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("SKILL.md 找不到，找过：" + "、".join(str(c) for c in candidates))
+
+
+def _copy_skill(destination: str, force: bool) -> int:
+    target_dir = Path(destination).expanduser()
+    target = target_dir / "SKILL.md"
+    if target.exists() and not force:
+        sys.stderr.write(f"{target} 已存在；要覆盖再加 --force\n")
+        return 1
+    try:
+        payload = _skill_md_path().read_bytes()
+    except FileNotFoundError as e:
+        sys.stderr.write(f"{e}\n")
+        return 1
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+    sys.stderr.write(f"已写入 {target}\n")
+    sys.stderr.write("重启客户端后生效。\n")
+    return 0
+
+
+def _run_cli(argv: list[str]) -> int | None:
+    """处理命令行开关。
+
+    返回退出码表示"这是一次 CLI 调用，别进 MCP 模式"；返回 None 表示
+    没给参数（或给的是认不出来的参数）—— 照旧进 stdio MCP，避免把
+    客户端多传的参数变成启动失败。
+    """
+    if not argv:
+        return None
+    first = argv[0]
+    if first in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
+    if first == "--version":
+        sys.stdout.write(_server_version() + "\n")
+        return 0
+    if first == "--skill-path":
+        try:
+            sys.stdout.write(str(_skill_md_path()) + "\n")
+        except FileNotFoundError as e:
+            sys.stderr.write(f"{e}\n")
+            return 1
+        return 0
+    if first == "--print-skill":
+        try:
+            sys.stdout.write(_skill_md_path().read_text(encoding="utf-8"))
+        except FileNotFoundError as e:
+            sys.stderr.write(f"{e}\n")
+            return 1
+        return 0
+    if first == "--install-skill":
+        rest = argv[1:]
+        targets = [a for a in rest if not a.startswith("-")]
+        if not targets:
+            sys.stderr.write("--install-skill 需要一个目标目录\n")
+            return 2
+        return _copy_skill(targets[0], "--force" in rest)
+    sys.stderr.write(f"认不出的参数：{first}（当作 MCP stdio 启动；--help 看用法）\n")
+    return None
+
+
+def main() -> int | None:
+    code = _run_cli(sys.argv[1:])
+    if code is not None:
+        return code
     _force_utf8_streams()
     logger = None
     try:
@@ -479,4 +585,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

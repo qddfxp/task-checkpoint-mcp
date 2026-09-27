@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Configure git (the suite builds real refs)
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "ci"
+      - name: Acceptance suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Zero dependencies is a promise, not a slogan
+        run: python -c "import tomllib,sys; d=tomllib.load(open('pyproject.toml','rb')); print('dependencies =', d['project']['dependencies']); sys.exit(1 if d['project']['dependencies'] else 0)"
+
+  artifacts:
+    name: release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build and check
+        run: |
+          python -m pip install --quiet build twine check-jsonschema
+          python -m build
+          python -m twine check dist/*
+      - name: server.json matches the MCP Registry schema
+        run: check-jsonschema --schemafile "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json" server.json
+      - name: The wheel ships SKILL.md
+        run: |
+          python -c "import glob,sys,zipfile; n=zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist(); hit=[x for x in n if x.endswith('share/task-checkpoint-mcp/SKILL.md')]; print('SKILL.md in wheel:', bool(hit)); sys.exit(0 if hit else 1)"
+      - name: A pip install can install the skill without the repo
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --no-deps dist/*.whl
+          cd /tmp
+          /tmp/venv/bin/tc-mcp --install-skill /tmp/skill
+          diff /tmp/skill/SKILL.md "$GITHUB_WORKSPACE/SKILL.md"
+          echo "the installed package can lay down its own SKILL.md"

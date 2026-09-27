@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -168,6 +170,57 @@ class TaskCheckpointRegressionTests(unittest.TestCase):
         self.assertEqual(tc_mcp._server_version(), declared)
         info = tc_mcp.handle_initialize({"protocolVersion": "2025-06-18"}, 1)["result"]["serverInfo"]
         self.assertEqual(info["version"], declared)
+
+
+    def test_skill_md_ships_with_the_code(self):
+        """SKILL.md 必须能被找到。
+
+        README 主推 `pipx install`，那条路径下用户手上没有仓库。装成包时
+        SKILL.md 是 data-files（<data>/share/task-checkpoint-mcp/SKILL.md），
+        从源码跑时是仓库根目录；以前只有后者，pip 用户拿不到这个文件。
+        """
+        path = tc_mcp._skill_md_path()
+        self.assertTrue(path.is_file(), path)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("name: task-checkpoint", text)
+        self.assertIn("tc_save", text)
+
+    def test_install_skill_writes_and_refuses_to_clobber(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "task-checkpoint"
+            expected = tc_mcp._skill_md_path().read_text(encoding="utf-8")
+
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tc_mcp._copy_skill(str(target), force=False), 0)
+            written = target / "SKILL.md"
+            self.assertEqual(written.read_text(encoding="utf-8"), expected)
+
+            # 已存在时必须拒绝，不能默默覆盖用户的改动
+            written.write_text("clobbered", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tc_mcp._copy_skill(str(target), force=False), 1)
+            self.assertEqual(written.read_text(encoding="utf-8"), "clobbered")
+
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tc_mcp._copy_skill(str(target), force=True), 0)
+            self.assertEqual(written.read_text(encoding="utf-8"), expected)
+
+    def test_cli_flags_stay_out_of_the_stdio_path(self):
+        """客户端可能多传参数；认不出来的参数不能让服务器起不来。
+
+        返回 None 表示"照旧进 stdio MCP"，这才是兼容旧行为的那条路。
+        """
+        self.assertIsNone(tc_mcp._run_cli([]))
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertIsNone(tc_mcp._run_cli(["--something-a-client-added"]))
+
+        for argv in (["--version"], ["--help"], ["--skill-path"], ["--print-skill"]):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tc_mcp._run_cli(argv), 0, argv)
+
+    def test_install_skill_flag_needs_a_directory(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(tc_mcp._run_cli(["--install-skill"]), 2)
 
 
 if __name__ == "__main__":

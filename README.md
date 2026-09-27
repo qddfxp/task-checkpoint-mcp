@@ -33,12 +33,12 @@ pipx install task-checkpoint-mcp
 **三、把 `SKILL.md` 装进技能目录**，不装的话 Agent 不会主动存档
 
 ```bash
-mkdir -p ~/.claude/skills/task-checkpoint
-curl -fsSL -o ~/.claude/skills/task-checkpoint/SKILL.md \
-  https://raw.githubusercontent.com/qddfxp/task-checkpoint-mcp/main/SKILL.md
+tc-mcp --install-skill ~/.claude/skills/task-checkpoint
 ```
 
-（技能目录按客户端而定，见下面"把 SKILL.md 装进 Agent 的技能目录"。如果 `raw.githubusercontent.com` 访问不了，先按下面"安装"里的方式二把仓库 clone 下来，再 `cp SKILL.md` 过去。）
+`SKILL.md` 随包一起装（wheel 里的包数据），不需要仓库、也不需要联网。想看内容用 `tc-mcp --print-skill`，想知道它在哪用 `tc-mcp --skill-path`。
+
+（技能目录按客户端而定，见下面"把 SKILL.md 装进 Agent 的技能目录"。）
 
 **四、交给 Agent 用。** 一个任务就四步：
 
@@ -242,13 +242,25 @@ args = []
 `~/.agents/skills/` 是多个客户端共用的技能目录；客户端专属目录优先于它 —— 同名技能以客户端专属目录里的那份为准。OpenCode 等其它客户端放到它自己文档里的技能目录即可，规则不变。
 
 ```bash
-mkdir -p ~/.claude/skills/task-checkpoint
-cp SKILL.md ~/.claude/skills/task-checkpoint/SKILL.md
+tc-mcp --install-skill ~/.claude/skills/task-checkpoint
 ```
+
+`SKILL.md` 是随包一起安装的（wheel 里的包数据），所以 `pipx install` 的用户不需要仓库，也不需要联网。目标已存在时会拒绝覆盖 —— 确实要覆盖加 `--force`；只想看内容用 `tc-mcp --print-skill`。
+
+克隆了仓库的话，`cp SKILL.md <技能目录>/` 效果一样。
 
 Windows 路径形如 `C:\Users\<你>\.claude\skills\task-checkpoint\SKILL.md`。各客户端的技能目录可能不同，以它自己的文档为准；要求只有一条：文件落在技能目录下的 `<技能名>/SKILL.md`。重启客户端后生效。
 
 ## 自检（可选）
+
+装完最快的一条，确认入口点活着、拿到版本号：
+
+```bash
+tc-mcp --version        # 版本号
+tc-mcp --help           # 所有开关
+```
+
+下面几条都**要先克隆仓库** —— pip 装出来的包里没有 `tests/` 和 `tools/`。
 
 在克隆下来的仓库里跑一遍回归测试：
 
@@ -256,9 +268,9 @@ Windows 路径形如 `C:\Users\<你>\.claude\skills\task-checkpoint\SKILL.md`。
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-最后一行是 `OK` 就对了。118 个用例：这台机器上连续 8 次实测为 28 到 35 秒（最慢一条 4.3 秒，git 子进程占大头），同一套件在别的机器或状态下实测到过 177 到 340 秒 —— 开销集中在 git 子进程（`refs/checkpoints/` 相关用例）和静默期等待，所以耗时对磁盘和实时扫描很敏感，别把秒数当承诺。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
+最后一行是 `OK` 就对了。整套测试（100 多个用例）整批约 2.5～6 分钟 —— 本机实测 156 到 340 秒（C 盘全新 clone 156 秒，E 盘 166～340 秒），开销集中在 git 子进程（`refs/checkpoints/` 相关用例占大头）和静默期等待，所以耗时对磁盘和杀毒的实时扫描很敏感，**别把秒数当承诺**。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有读 `pyproject.toml` 的那几条会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
-想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对"不动你 git"的承诺）：
+仓库里还能跑真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对"不动你 git"的承诺）：
 
 ```bash
 python tools/drill.py
@@ -266,13 +278,13 @@ python tools/drill.py
 
 它跑完默认把场地删掉；想看场地就 `TC_DRILL_KEEP=1 python tools/drill.py`（演练有未通过项时也会自动保留，方便排查）。
 
-确认服务器能起来 —— 会回一行带 `serverInfo` 的 JSON：
+确认 MCP 服务器能起来 —— 会回一行带 `serverInfo` 的 JSON：
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' | python scripts/tc_mcp.py
 ```
 
-从 pip 装的版本没有 `scripts/`，用 `python -m tc_mcp` 代替。
+从 pip 装的版本没有 `scripts/`，把上面那条改成 `... | tc-mcp`（或 `python -m tc_mcp`）就行。
 
 ## 环境变量
 
@@ -392,26 +404,29 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ```
 .
 ├── README.md        本文件
-├── SKILL.md         给 Agent 看的使用约束（功能的一部分，不是可选文档）
+├── SKILL.md         给 Agent 看的使用约束（功能的一部分，会随包一起安装）
 ├── LICENSE          MIT
 ├── pyproject.toml   打包配置，源码不改成包目录
 ├── MANIFEST.in      sdist 包含哪些文件
 ├── server.json      官方 MCP Registry 的发布元数据
 ├── scripts/
 │   ├── tc.py        业务核心
-│   └── tc_mcp.py    stdio MCP 适配层
+│   └── tc_mcp.py    stdio MCP 适配层 + 给人用的命令行开关
 ├── tools/
 │   └── drill.py     真机端到端演练探针（不进测试套件，手动跑）
-└── tests/
-    ├── test_tc.py                完整验收测试（回退安全、并发锁、git ref、返回字段与打包契约）
-    └── test_tc_regressions.py    针对已修缺陷的定向回归
+├── npm/             npm 启动器包（只是壳，服务器本体不在这里）
+├── tests/
+│   ├── test_tc.py                       完整验收测试（回退安全、并发锁、git ref、返回字段、打包契约）
+│   ├── test_tc_regressions.py           针对已修缺陷的定向回归
+│   └── test_packaging_consistency.py    三处版本号 / 注册表元数据 / README 所有权标记的一致性
+└── .github/workflows/ci.yml             CI：跑测试、构建、校验 server.json 与 wheel
 ```
 
 构建产物不进仓库。发布走两条：PyPI 上的 `task-checkpoint-mcp`（`pipx install task-checkpoint-mcp`）是主渠道，wheel 和 sdist 同时挂在 GitHub Releases 上。
 
 ## 参与
 
-Issue 和 PR 都欢迎。动代码前先跑一遍测试（见上面"自检"，118 个用例，本机约 30 秒）。
+Issue 和 PR 都欢迎。动代码前先跑一遍测试（见上面"自检"，100 多个用例，本机 2.5～6 分钟）。
 
 - `tests/test_tc.py` 是完整验收套件：回退安全、并发锁、git ref 可达性、每个分支的返回字段、打包契约
 - `tests/test_tc_regressions.py` 是已修缺陷的定向回归 —— 新修一个 bug 就往这里加一条，别只改代码
@@ -661,13 +676,25 @@ Copy it into a directory your client scans; the directory name is the skill name
 `~/.agents/skills/` is shared by several clients; a client-specific directory takes precedence over it when the same skill name exists in both. For OpenCode and others, use the skill directory documented by that client — the rule is unchanged.
 
 ```bash
-mkdir -p ~/.claude/skills/task-checkpoint
-cp SKILL.md ~/.claude/skills/task-checkpoint/SKILL.md
+tc-mcp --install-skill ~/.claude/skills/task-checkpoint
 ```
+
+`SKILL.md` ships as package data inside the wheel, so `pipx install` users need neither the repo nor network access. It refuses to overwrite an existing file — add `--force` if you really mean to. `tc-mcp --print-skill` prints the contents instead.
+
+With a clone, `cp SKILL.md <skill-dir>/` is equivalent.
 
 On Windows the path looks like `C:\Users\<you>\.claude\skills\task-checkpoint\SKILL.md`. Clients may scan different directories — check their docs. The only requirement is that the file lands at `<skill-dir>/<skill-name>/SKILL.md`. Restart the client for it to take effect.
 
 ## Verify (optional)
+
+Quickest check that the entry point is alive and what version you have:
+
+```bash
+tc-mcp --version        # version
+tc-mcp --help           # all flags
+```
+
+Everything below **needs a clone** — a pip install ships neither `tests/` nor `tools/`.
 
 Run the regression suite inside a cloned repo:
 
@@ -675,9 +702,9 @@ Run the regression suite inside a cloned repo:
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-The last line should be `OK`. 118 tests: 28-35 s in 8 consecutive runs on this machine (slowest single case 4.3 s, git subprocesses dominate), while the same suite has been measured at 177-340 s on other machines or states -- the cost sits in git subprocesses (the `refs/checkpoints/` cases) and quiet-period waits, so wall time is very sensitive to disk and on-access scanning. Don't treat the number as a promise. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the one packaging-contract check that reads `pyproject.toml` is skipped there because `tomllib` is 3.11+.
+The last line should be `OK`. The full suite (100+ cases) takes roughly 2.5–6 minutes — measured at 156–340 s on this machine (156 s in a fresh clone on C:, 166–340 s on E:), with the cost concentrated in git subprocesses (the `refs/checkpoints/` cases dominate) and quiet-period waits. Wall time is very sensitive to disk and to on-access antivirus scanning, so **don't treat the number as a promise**. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the cases that read `pyproject.toml` are skipped there because `tomllib` is 3.11+.
 
-For an end-to-end drill on a real workspace (spawns a real MCP subprocess, kills it mid-flight, builds a ~190 MB heavy workspace, and verifies the "your git is untouched" promise item by item):
+The repo also carries an end-to-end drill on a real workspace (spawns a real MCP subprocess, kills it mid-flight, builds a ~190 MB heavy workspace, and verifies the "your git is untouched" promise item by item):
 
 ```bash
 python tools/drill.py
@@ -685,13 +712,13 @@ python tools/drill.py
 
 It deletes the workspace when it finishes; use `TC_DRILL_KEEP=1 python tools/drill.py` to keep it (it's also kept automatically when the drill has failures, to help diagnose).
 
-Confirm the server starts — it answers with one JSON line containing `serverInfo`:
+Confirm the MCP server starts — it answers with one JSON line containing `serverInfo`:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' | python scripts/tc_mcp.py
 ```
 
-A pip-installed copy has no `scripts/`; use `python -m tc_mcp` instead.
+A pip-installed copy has no `scripts/`; change that last part to `... | tc-mcp` (or `python -m tc_mcp`).
 
 ## Environment variables
 
@@ -792,26 +819,29 @@ The active pointer and baseline indexes are scoped per workspace: when several w
 ```
 .
 ├── README.md        this file
-├── SKILL.md         the agent-facing usage contract (part of the feature)
+├── SKILL.md         the agent-facing usage contract (part of the feature, ships with the package)
 ├── LICENSE          MIT
 ├── pyproject.toml   packaging; sources stay in scripts/, not a package dir
 ├── MANIFEST.in      what goes into the sdist
 ├── server.json      publish metadata for the official MCP Registry
 ├── scripts/
 │   ├── tc.py        core
-│   └── tc_mcp.py    stdio MCP adapter
+│   └── tc_mcp.py    stdio MCP adapter + the human-facing command-line flags
 ├── tools/
 │   └── drill.py     end-to-end probe against a real workspace (not in the test suite, run by hand)
-└── tests/
-    ├── test_tc.py                full acceptance suite (rollback safety, concurrency lock, git refs, return fields, packaging contract)
-    └── test_tc_regressions.py    targeted regressions for fixed defects
+├── npm/             the npm launcher package (a shell; the server itself is not here)
+├── tests/
+│   ├── test_tc.py                       full acceptance suite (rollback safety, concurrency lock, git refs, return fields, packaging contract)
+│   ├── test_tc_regressions.py           targeted regressions for fixed defects
+│   └── test_packaging_consistency.py    the three version numbers / registry metadata / README ownership marker
+└── .github/workflows/ci.yml             CI: run the tests, build, validate server.json and the wheel
 ```
 
 Build artifacts stay out of the repo. There are two release channels: `task-checkpoint-mcp` on PyPI (`pipx install task-checkpoint-mcp`) is the primary one, with the wheel and sdist also attached to GitHub Releases.
 
 ## Contributing
 
-Issues and PRs are welcome. Run the tests before changing code (see "Verify" above — 118 cases, about 30 s here and minutes on slow machines).
+Issues and PRs are welcome. Run the tests before changing code (see "Verify" above — 100+ cases, 2.5–6 minutes here).
 
 - `tests/test_tc.py` is the full acceptance suite: rollback safety, concurrency lock, git ref reachability, the return fields of every branch, packaging contract
 - `tests/test_tc_regressions.py` holds targeted regressions for fixed defects — when you fix a bug, add a case here rather than only changing the code

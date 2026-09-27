@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "task-checkpoint-mcp"
-version = "0.1.4"
+version = "0.1.5"
 description = "MCP server adding checkpoint and resume to long agent tasks: roll back to any step, resume in a new session, hand off to another machine. Pure Python stdlib, zero dependencies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -56,3 +56,10 @@ task-checkpoint-mcp = "tc_mcp:main"
 # 于是下面两个顶层模块正好落在 scripts/tc.py 和 scripts/tc_mcp.py。
 package-dir = { "" = "scripts" }
 py-modules = ["tc", "tc_mcp"]
+
+# SKILL.md 必须随包一起装：它是功能的一半（让模型每完成一步真的去调
+# tc_save），而 README 主推的 `pipx install` 路径下用户手上没有仓库，
+# 拿不到这个文件。放进 data-files 之后 `tc-mcp --install-skill <dir>`
+# 才有东西可写。装在 <prefix>/share/task-checkpoint-mcp/SKILL.md。
+[tool.setuptools.data-files]
+"share/task-checkpoint-mcp" = ["SKILL.md"]

@@ -3,7 +3,7 @@
   "name": "io.github.qddfxp/task-checkpoint-mcp",
   "title": "Task Checkpoint",
   "description": "MCP server that checkpoints long agent tasks: roll back to any step, resume in a new session.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "repository": {
     "url": "https://github.com/qddfxp/task-checkpoint-mcp",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "task-checkpoint-mcp",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "transport": {
         "type": "stdio"
       }
