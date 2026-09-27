@@ -1,6 +1,7 @@
 # Task Checkpoint MCP
 
 [![PyPI](https://img.shields.io/pypi/v/task-checkpoint-mcp.svg)](https://pypi.org/project/task-checkpoint-mcp/)
+[![npm](https://img.shields.io/npm/v/task-checkpoint-mcp.svg)](https://www.npmjs.com/package/task-checkpoint-mcp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](pyproject.toml)
@@ -134,6 +135,28 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 ```
 
 `command` 要写解释器的**绝对路径**，不要写 `python` —— 客户端不一定能解析到你要的那个。装过之后也可以直接 `python -m tc_mcp`。
+
+### 方式三：用 npx 启动
+
+npm 上有一个同名的 `task-checkpoint-mcp`，但它是**启动器**，不是服务器本体：
+
+```bash
+npx -y task-checkpoint-mcp
+```
+
+它只做一件事：找到本机装了 `tc_mcp` 的 Python 解释器，然后把 stdio 透传给 `python -m tc_mcp`。所以**本机仍然要先有 Python 包**（方式一或方式二）。没有的话它会打印安装命令、以退出码 1 结束，而不是丢一堆 traceback 给你。
+
+适合客户端只认 npm 式启动命令的情况：
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": { "command": "npx", "args": ["-y", "task-checkpoint-mcp"] }
+  }
+}
+```
+
+`npx -y task-checkpoint-mcp --version` / `--help` 是启动器自己的开关，不需要本机有 Python。
 
 ### 配置文件放哪
 
@@ -578,6 +601,28 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 ```
 
 `command` must be the **absolute path** to the interpreter, not bare `python` — the client may not resolve the one you meant. Once installed you can also use `python -m tc_mcp`.
+
+### Option 3 — launch via npx
+
+There is a package with the same name on npm, but it is a **launcher**, not the server:
+
+```bash
+npx -y task-checkpoint-mcp
+```
+
+All it does is find a Python interpreter with `tc_mcp` importable and hand stdio through to `python -m tc_mcp`. So **you still need the Python package first** (Option 1 or 2). Without it the launcher prints the install command and exits 1, rather than dumping a traceback on you.
+
+Use it when your client only knows npm-style launch commands:
+
+```json
+{
+  "mcpServers": {
+    "task-checkpoint": { "command": "npx", "args": ["-y", "task-checkpoint-mcp"] }
+  }
+}
+```
+
+`npx -y task-checkpoint-mcp --version` / `--help` belong to the launcher and need no local Python.
 
 ### Where the config file goes
 
