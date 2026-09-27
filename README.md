@@ -442,6 +442,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ├── pyproject.toml   打包配置，源码不改成包目录
 ├── MANIFEST.in      sdist 包含哪些文件
 ├── server.json      官方 MCP Registry 的发布元数据
+├── glama.json       Glama 目录的所有权标记
 ├── scripts/
 │   ├── tc.py        业务核心
 │   └── tc_mcp.py    stdio MCP 适配层 + 给人用的命令行开关
@@ -889,6 +890,7 @@ The active pointer and baseline indexes are scoped per workspace: when several w
 ├── pyproject.toml   packaging; sources stay in scripts/, not a package dir
 ├── MANIFEST.in      what goes into the sdist
 ├── server.json      publish metadata for the official MCP Registry
+├── glama.json       ownership marker for the Glama directory
 ├── scripts/
 │   ├── tc.py        core
 │   └── tc_mcp.py    stdio MCP adapter + the human-facing command-line flags
