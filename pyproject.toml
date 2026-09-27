@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "task-checkpoint-mcp"
-version = "0.1.6"
+version = "0.1.7"
 description = "MCP server adding checkpoint and resume to long agent tasks: roll back to any step, resume in a new session, hand off to another machine. Pure Python stdlib, zero dependencies."
 readme = "README.md"
 requires-python = ">=3.10"

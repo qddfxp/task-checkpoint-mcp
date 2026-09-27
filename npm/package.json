@@ -1,6 +1,6 @@
 {
   "name": "task-checkpoint-mcp",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "npx launcher for the task-checkpoint MCP server. The server itself is Python, standard library only — prefer `pipx install task-checkpoint-mcp`.",
   "license": "MIT",
   "repository": {
