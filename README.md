@@ -256,7 +256,7 @@ Windows 路径形如 `C:\Users\<你>\.claude\skills\task-checkpoint\SKILL.md`。
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-最后一行是 `OK` 就对了。117 个用例整批约 5 分钟 —— 本机 Windows 实测 340 秒，开销集中在 git 子进程（`refs/checkpoints/` 相关的用例占约一分钟）和静默期等待，所以磁盘和 git 的速度对总时长影响很大。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
+最后一行是 `OK` 就对了。118 个用例整批约 3～6 分钟 —— 本机 Windows 多次实测在 177 秒到 340 秒之间浮动，开销集中在 git 子进程（`refs/checkpoints/` 相关的用例占大头）和静默期等待，所以磁盘和 git 的速度对总时长影响很大。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有一条读 `pyproject.toml` 的打包契约检查会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
 想要真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对"不动你 git"的承诺）：
 
@@ -411,7 +411,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ## 参与
 
-Issue 和 PR 都欢迎。动代码前先跑一遍测试（见上面"自检"，117 个用例约 5 分钟）。
+Issue 和 PR 都欢迎。动代码前先跑一遍测试（见上面"自检"，118 个用例约 3～6 分钟）。
 
 - `tests/test_tc.py` 是完整验收套件：回退安全、并发锁、git ref 可达性、每个分支的返回字段、打包契约
 - `tests/test_tc_regressions.py` 是已修缺陷的定向回归 —— 新修一个 bug 就往这里加一条，别只改代码
@@ -675,7 +675,7 @@ Run the regression suite inside a cloned repo:
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-The last line should be `OK`. All 117 tests take about 5 minutes — 340 s measured on Windows, with the cost concentrated in git subprocesses (the `refs/checkpoints/` cases account for roughly a minute) and quiet-period waits, so disk and git speed matter a lot. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the one packaging-contract check that reads `pyproject.toml` is skipped there because `tomllib` is 3.11+.
+The last line should be `OK`. All 118 tests take roughly 3–6 minutes — repeated runs on Windows landed between 177 s and 340 s, with the cost concentrated in git subprocesses (the `refs/checkpoints/` cases dominate) and quiet-period waits, so disk and git speed matter a lot. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the one packaging-contract check that reads `pyproject.toml` is skipped there because `tomllib` is 3.11+.
 
 For an end-to-end drill on a real workspace (spawns a real MCP subprocess, kills it mid-flight, builds a ~190 MB heavy workspace, and verifies the "your git is untouched" promise item by item):
 
@@ -811,7 +811,7 @@ Build artifacts stay out of the repo. There are two release channels: `task-chec
 
 ## Contributing
 
-Issues and PRs are welcome. Run the tests before changing code (see "Verify" above — 117 cases, about 5 minutes).
+Issues and PRs are welcome. Run the tests before changing code (see "Verify" above — 118 cases, roughly 3–6 minutes).
 
 - `tests/test_tc.py` is the full acceptance suite: rollback safety, concurrency lock, git ref reachability, the return fields of every branch, packaging contract
 - `tests/test_tc_regressions.py` holds targeted regressions for fixed defects — when you fix a bug, add a case here rather than only changing the code
