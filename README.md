@@ -10,6 +10,8 @@
 
 一个 stdio MCP 服务器，**只用 Python 标准库**，不装任何第三方包。
 
+[快速开始](#快速开始) | [工具](#工具) | [客户端配置](#配置文件放哪) | [使用限制](#使用限制) | [English](#task-checkpoint-mcp-english)
+
 ## 快速开始
 
 **一、装**
@@ -46,6 +48,14 @@ tc_save    每完成一步存一次（带 conclusion 和 next）
 tc_resume  新会话开头先调这个接上进度
 tc_restore 退回去（先 apply:false 预览，再 apply:true）
 ```
+
+**五、不用记工具名，直接说人话。**
+
+> 用 task-checkpoint 开个任务，目标是把 user 模块拆成 service 和 repository 两层。每完成一步存一次档，带结论和下一步。
+
+它会调 `tc_init` 建任务，之后每完成一步调一次 `tc_save`。中途换会话、或者隔天接着做，你说一句"接着上次的做"，它调 `tc_resume` 就把进度拿回来了。
+
+（"每完成一步就存档"这条约束的可靠来源是 `SKILL.md` —— 装进技能目录之后它是硬规则；不装，就只能靠你每次提醒。）
 
 中途被打断、隔天换个模型重开，新会话调一次 `tc_resume` 拿到的是这个：
 
@@ -124,6 +134,42 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 ```
 
 `command` 要写解释器的**绝对路径**，不要写 `python` —— 客户端不一定能解析到你要的那个。装过之后也可以直接 `python -m tc_mcp`。
+
+### 配置文件放哪
+
+上面那段 `mcpServers` JSON 要写进客户端的配置文件。各客户端的位置和顶层键：
+
+| 客户端 | 配置文件 | 顶层键 |
+|---|---|---|
+| Claude Desktop | Windows `%APPDATA%\Claude\claude_desktop_config.json`；macOS `~/Library/Application Support/Claude/claude_desktop_config.json` | `mcpServers` |
+| Claude Code | 项目根目录 `.mcp.json` | `mcpServers` |
+| Cursor | 全局 `~/.cursor/mcp.json`；项目内 `.cursor/mcp.json` 优先 | `mcpServers` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
+| ZCode | `~/.zcode/cli/config.json` | `mcpServers` |
+| **VS Code / Copilot** | 项目内 `.vscode/mcp.json`；用户级 `%APPDATA%\Code\User\mcp.json` | **`servers`** |
+| **Codex CLI** | `~/.codex/config.toml` | **TOML 的 `[mcp_servers]`，不是 JSON** |
+
+两个容易踩的：
+
+**VS Code 的顶层键是 `servers`，不是 `mcpServers`。** 直接抄上面的 JSON 不会生效，得改键名：
+
+```json
+{
+  "servers": {
+    "task-checkpoint": { "command": "tc-mcp", "args": [] }
+  }
+}
+```
+
+**Codex 用 TOML。** 同样一段配置要写成：
+
+```toml
+[mcp_servers.task-checkpoint]
+command = "tc-mcp"
+args = []
+```
+
+其余客户端以各自的文档为准。
 
 ## 怎么用
 
@@ -363,6 +409,19 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 构建产物不进仓库。发布走两条：PyPI 上的 `task-checkpoint-mcp`（`pipx install task-checkpoint-mcp`）是主渠道，wheel 和 sdist 同时挂在 GitHub Releases 上。
 
+## 参与
+
+Issue 和 PR 都欢迎。动代码前先跑一遍测试（见上面"自检"，117 个用例约 5 分钟）。
+
+- `tests/test_tc.py` 是完整验收套件：回退安全、并发锁、git ref 可达性、每个分支的返回字段、打包契约
+- `tests/test_tc_regressions.py` 是已修缺陷的定向回归 —— 新修一个 bug 就往这里加一条，别只改代码
+
+有一条硬约束：**只用标准库**。所以不接受任何新增依赖，测试依赖也不行（测试用 `unittest`，不用 pytest）。
+
+## License
+
+MIT，见 [LICENSE](LICENSE)。
+
 ---
 
 # Task Checkpoint MCP (English)
@@ -370,6 +429,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 Checkpoint and resume for long agent tasks: save each step as you go, pick the work back up in a new session, roll back to any earlier step.
 
 A stdio MCP server written in **pure Python standard library** — no third-party packages. Python 3.10+.
+
+[Quick start](#quick-start) | [Tools](#tools) | [Client config](#where-the-config-file-goes) | [Limits](#limits)
 
 ## Quick start
 
@@ -407,6 +468,14 @@ tc_save    once per completed step (with conclusion and next)
 tc_resume  first call in a new session, to pick up where you left off
 tc_restore roll back (apply:false to preview, then apply:true)
 ```
+
+**5. Don't memorise tool names — just talk.**
+
+> Use task-checkpoint to start a task: the goal is to split the user module into a service layer and a repository layer. Checkpoint after each step, with a conclusion and what's next.
+
+It calls `tc_init` to create the task and `tc_save` after each step. Change sessions, or come back the next day, and "continue from where we left off" makes it call `tc_resume` and pick the progress back up.
+
+(The reliable source of "checkpoint after every step" is `SKILL.md` — once installed into the skill directory it's a hard rule. Without it, you have to remind the agent every time.)
 
 Interrupted mid-task, resumed the next day on another model — one `tc_resume` in the new session gives you this:
 
@@ -484,6 +553,42 @@ git clone https://github.com/qddfxp/task-checkpoint-mcp
 ```
 
 `command` must be the **absolute path** to the interpreter, not bare `python` — the client may not resolve the one you meant. Once installed you can also use `python -m tc_mcp`.
+
+### Where the config file goes
+
+That `mcpServers` block belongs in your client's config file. Locations and top-level key:
+
+| Client | Config file | Top-level key |
+|---|---|---|
+| Claude Desktop | Windows `%APPDATA%\Claude\claude_desktop_config.json`; macOS `~/Library/Application Support/Claude/claude_desktop_config.json` | `mcpServers` |
+| Claude Code | `.mcp.json` in the project root | `mcpServers` |
+| Cursor | global `~/.cursor/mcp.json`; project-local `.cursor/mcp.json` wins | `mcpServers` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
+| ZCode | `~/.zcode/cli/config.json` | `mcpServers` |
+| **VS Code / Copilot** | project-local `.vscode/mcp.json`; user-level `%APPDATA%\Code\User\mcp.json` | **`servers`** |
+| **Codex CLI** | `~/.codex/config.toml` | **TOML `[mcp_servers]`, not JSON** |
+
+Two easy traps:
+
+**The VS Code key is `servers`, not `mcpServers`.** Copying the JSON above verbatim won't work — rename the key:
+
+```json
+{
+  "servers": {
+    "task-checkpoint": { "command": "tc-mcp", "args": [] }
+  }
+}
+```
+
+**Codex uses TOML.** The same entry becomes:
+
+```toml
+[mcp_servers.task-checkpoint]
+command = "tc-mcp"
+args = []
+```
+
+For any other client, follow its own documentation.
 
 ## Usage
 
@@ -703,6 +808,19 @@ The active pointer and baseline indexes are scoped per workspace: when several w
 ```
 
 Build artifacts stay out of the repo. There are two release channels: `task-checkpoint-mcp` on PyPI (`pipx install task-checkpoint-mcp`) is the primary one, with the wheel and sdist also attached to GitHub Releases.
+
+## Contributing
+
+Issues and PRs are welcome. Run the tests before changing code (see "Verify" above — 117 cases, about 5 minutes).
+
+- `tests/test_tc.py` is the full acceptance suite: rollback safety, concurrency lock, git ref reachability, the return fields of every branch, packaging contract
+- `tests/test_tc_regressions.py` holds targeted regressions for fixed defects — when you fix a bug, add a case here rather than only changing the code
+
+One hard constraint: **standard library only**. No new dependencies, not even test ones (the tests use `unittest`, not pytest).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 Implementation notes for people changing this code (`.git/index` byte counts, ref collision behaviour, locking strategy, manifest anchoring) are in the Chinese section above.
 
