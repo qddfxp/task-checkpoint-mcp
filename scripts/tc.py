@@ -635,9 +635,14 @@ class TaskCheckpoint:
             skipped = sorted(p for p, info in manifest.items() if info.get("sensitive") or info.get("skipped"))
         errors = [p.name for p in self._task(state["task_id"]).rglob("*.tmp")]
         errors.extend(dict.fromkeys(getattr(self, "_health", [])))
+        # 这两个兜底字面量必须先取出来：f-string 的表达式部分在 Python 3.10 /
+        # 3.11 里不允许出现反斜杠（含 \uXXXX 转义），写进去会让整个模块 import
+        # 失败 —— 而 pyproject 承诺 requires-python >= 3.10。
+        next_text = last.get("next") or "\u672a\u8bb0\u5f55"
+        drift_text = ", ".join(drift) or "\u65e0"
         handoff = (
             f"\u4efb\u52a1\uff1a{state['name']}\n\u76ee\u6807\uff1a{state['goal']}\n\u5f53\u524d\u6b65\u9aa4\uff1a{state['head']}\n"
-            f"\u4e0b\u4e00\u6b65\uff1a{last.get('next') or '\u672a\u8bb0\u5f55'}\n\u672a\u843d\u6863\uff1a{', '.join(drift) or '\u65e0'}"
+            f"\u4e0b\u4e00\u6b65\uff1a{next_text}\n\u672a\u843d\u6863\uff1a{drift_text}"
         )
         return {
             "goal": state["goal"], "constraints": state["constraints"], "head": state["head"],

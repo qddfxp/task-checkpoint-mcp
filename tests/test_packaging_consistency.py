@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import unittest
 from pathlib import Path
@@ -89,6 +90,32 @@ class ReleaseConsistency(unittest.TestCase):
         self.assertEqual(npm["bin"], {"task-checkpoint-mcp": "cli.js"})
         self.assertEqual(sorted(npm["files"]), ["README.md", "cli.js"])
         self.assertEqual(npm["license"], "MIT")
+
+
+class PortabilityPromises(unittest.TestCase):
+    """pyproject 承诺的 Python 版本，代码得真的能在那上面跑。（这个类不依赖 tomllib）"""
+
+    def test_no_backslash_inside_fstring_expressions(self):
+        """3.10 / 3.11 不允许 f-string 的表达式部分出现反斜杠。
+
+        含 `\\uXXXX` 转义的兜底字面量写进 `{...}` 里，在 3.12+ 编译得过，但
+        在 3.10 和 3.11 上整个模块 import 就炸 —— `requires-python = ">=3.10"`
+        会变成一句空话。CI 的 3.10 job 是最终闸门，这条是本地闸门。
+        """
+        offenders = []
+        sources = sorted((ROOT / "scripts").glob("*.py")) + sorted((ROOT / "tests").glob("*.py"))
+        for path in sources:
+            source = path.read_text(encoding="utf-8")
+            for node in ast.walk(ast.parse(source, filename=str(path))):
+                if not isinstance(node, ast.JoinedStr):
+                    continue
+                for value in node.values:
+                    if isinstance(value, ast.FormattedValue):
+                        segment = ast.get_source_segment(source, value.value) or ""
+                        if "\\" in segment:
+                            offenders.append(f"{path.name}:{value.value.lineno}  {segment.strip()}")
+        self.assertEqual(offenders, [],
+                         "f-string 表达式里出现反斜杠，3.10 / 3.11 上会 SyntaxError：\n" + "\n".join(offenders))
 
 
 if __name__ == "__main__":

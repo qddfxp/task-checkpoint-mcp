@@ -719,6 +719,11 @@ class ReviewFixes(unittest.TestCase):
         root = str(self.root)
         store = self.root / ".checkpoints"
         TaskCheckpoint(root)._write_active("t1")
+        # 必须清掉别的测试留下的 root：_watch_once() 遍历 tc._WATCH 里的**全部**
+        # root，残留 N 个就会把每行同样的内容重复写 N 遍，而这个测试断言的是
+        # 精确行数。不清的话它在"前面某个测试碰过 _WATCH"的机器上会假失败。
+        saved_watch = dict(tc._WATCH)
+        tc._WATCH.clear()
         tc._WATCH[root] = {"root": root, "store": str(store)}
         tc_mcp._WATCH_ERRORS.clear()
         original = tc.TaskCheckpoint.tick
@@ -749,7 +754,8 @@ class ReviewFixes(unittest.TestCase):
                              ["task-checkpoint watch recovered after 101 failed ticks"])
         finally:
             tc.TaskCheckpoint.tick = original
-            tc._WATCH.pop(root, None)
+            tc._WATCH.clear()
+            tc._WATCH.update(saved_watch)
             tc_mcp._WATCH_ERRORS.clear()
 
     def test_watch_once_stays_silent_when_the_tick_succeeds(self):

@@ -268,7 +268,17 @@ tc-mcp --help           # 所有开关
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-最后一行是 `OK` 就对了。整套测试（100 多个用例）整批约 2.5～6 分钟 —— 本机实测 156 到 340 秒（C 盘全新 clone 156 秒，E 盘 166～340 秒），开销集中在 git 子进程（`refs/checkpoints/` 相关用例占大头）和静默期等待，所以耗时对磁盘和杀毒的实时扫描很敏感，**别把秒数当承诺**。全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有读 `pyproject.toml` 的那几条会因为 `tomllib` 被跳过（3.11+ 全跑）。
+最后一行是 `OK` 就对了。整套测试（100 多个用例）跑一次的时间**完全看环境**：
+
+| 跑在哪 | 实测 |
+|---|---|
+| CI 的 ubuntu runner | **4.7 秒** |
+| CI 的 windows runner | 39.8 秒 |
+| 本机 Windows（E 盘） | **156～340 秒** |
+
+同一套代码差了七十倍。开销集中在 git 子进程（`refs/checkpoints/` 相关用例占大头）和静默期等待，对磁盘和杀毒的实时扫描极其敏感 —— **别把秒数当承诺**，也别拿一个数字去对比另一台机器。
+
+全部只用标准库，不需要 pytest；在 Python 3.10 上也能跑，只有读 `pyproject.toml` 的那几条会因为 `tomllib` 被跳过（3.11+ 全跑）。
 
 仓库里还能跑真机端到端演练（起真 MCP 子进程、真杀进程、建约 190 MB 的重工作区、逐项核对"不动你 git"的承诺）：
 
@@ -702,7 +712,17 @@ Run the regression suite inside a cloned repo:
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-The last line should be `OK`. The full suite (100+ cases) takes roughly 2.5–6 minutes — measured at 156–340 s on this machine (156 s in a fresh clone on C:, 166–340 s on E:), with the cost concentrated in git subprocesses (the `refs/checkpoints/` cases dominate) and quiet-period waits. Wall time is very sensitive to disk and to on-access antivirus scanning, so **don't treat the number as a promise**. Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the cases that read `pyproject.toml` are skipped there because `tomllib` is 3.11+.
+The last line should be `OK`. How long the full suite (100+ cases) takes **depends entirely on where you run it**:
+
+| Where | Measured |
+|---|---|
+| CI ubuntu runner | **4.7 s** |
+| CI windows runner | 39.8 s |
+| This machine, Windows (E: drive) | **156–340 s** |
+
+The same code, a 70× spread. The cost sits in git subprocesses (the `refs/checkpoints/` cases dominate) and quiet-period waits, and it is extremely sensitive to disk speed and to on-access antivirus scanning — so **don't treat any of these numbers as a promise**, and don't compare machines by them.
+
+Standard library only (`unittest`), no pytest. It runs on Python 3.10 too; the cases that read `pyproject.toml` are skipped there because `tomllib` is 3.11+.
 
 The repo also carries an end-to-end drill on a real workspace (spawns a real MCP subprocess, kills it mid-flight, builds a ~190 MB heavy workspace, and verifies the "your git is untouched" promise item by item):
 
