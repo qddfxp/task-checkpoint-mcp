@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -224,6 +225,24 @@ class TaskCheckpointRegressionTests(unittest.TestCase):
     def test_install_skill_flag_needs_a_directory(self):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(tc_mcp._run_cli(["--install-skill"]), 2)
+
+
+    def test_every_tool_description_says_when_to_use_it(self):
+        """工具描述要讲"什么时候用"，不能只讲"它做什么"。
+
+        0.1.8 之前这十条平均只有 28 个字符，只描述机制，Glama 的工具定义质量
+        评分里 usage guidance 一项只拿到 2/5，整条 listing 卡在 3.7/5。描述是给
+        模型读的：只写机制的话，模型不知道该在什么时候挑哪个工具。
+        """
+        tools = tc_mcp.handle_tools_list({}, 1)["result"]["tools"]
+        weak = []
+        for tool in tools:
+            description = tool["description"]
+            if len(description) < 120:
+                weak.append(f"{tool['name']}: 只有 {len(description)} 个字符，讲不清使用场合")
+            elif not re.search(r"(Use it|Use this|Call it)", description):
+                weak.append(f"{tool['name']}: 没有一句说明什么时候该调它")
+        self.assertEqual(weak, [], "工具描述缺少使用指引：\n" + "\n".join(weak))
 
 
 if __name__ == "__main__":

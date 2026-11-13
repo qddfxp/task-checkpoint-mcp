@@ -103,82 +103,81 @@ def _schema(properties: dict, required: list[str]) -> dict:
 def _string(description: str) -> dict:
     return {"type": "string", "description": description}
 
-
-SKIPPED_PATHS = {"type": "array", "items": {"type": "string"}, "description": "skipped paths (e.g. symlinks pointing outside the workspace)"}
-GIT_INFO = {"type": "object", "description": "这一步的 git 指针。git 是增强：ok 为 false 或 reason 说明没建 ref（不是仓库、TC_GIT=off、ref 重名等）时存档仍然有效",
+SKIPPED_PATHS = {"type": "array", "items": {"type": "string"}, "description": "paths skipped (e.g. symlinks pointing outside the workspace)"}
+GIT_INFO = {"type": "object", "description": "Git pointer for this step. Git is an enhancement, not a requirement: when `ok` is false, `reason` says why no ref was created (not a repo, TC_GIT=off, ref already taken), and the checkpoint is still valid",
             "properties": {"ok": {"type": "boolean"}, "ref": {"type": ["string", "null"]},
                            "reason": {"type": ["string", "null"]}, "error": {"type": "string"},
                            "unchanged": {"type": ["boolean", "null"]}},
             "required": ["ok"]}
 
 
-ROOT = _string("工作区根目录")
-TASK_ID = _string("任务 id。省略时使用当前活动任务")
+ROOT = _string("Workspace root")
+TASK_ID = _string("Task id; omit to use the current active task")
 TOOL_SPECS = [
     {
         "name": "tc_init",
-        "description": "创建任务。已有活动任务会挂起而不是关闭。",
-        "inputSchema": _schema({"root": ROOT, "name": _string("任务名"), "goal": _string("任务目标"), "constraints": _string("约束"), "store": _string("存档目录；省略时用工作区内 .checkpoints"), "exclude": {"type": "array", "items": {"type": "string"}, "description": "额外的排除模式，按单个名字段匹配（目录名或路径第一段），如 [\"config\", \"*.local\"]"}}, ["root", "name"]),
-        "outputSchema": _schema({"task_id": _string("新任务 id"), "name": _string("任务名"), "store": _string("存档目录"), "store_is_external": {"type": "boolean"}, "prev_suspended": {"type": ["string", "null"]}, "exclude": {"type": "array", "items": {"type": "string"}}, "note": _string("存档位置提示")}, ["task_id", "name", "store", "store_is_external", "note"]),
+        "description": "Create a task. Use this once at the start of work that will span several steps, before touching files, so there is something to checkpoint into. An already-active task is suspended, not closed. Do not call it per step (that is `tc_save`) or to resume existing work (that is `tc_switch`). Fill in `goal` and `constraints` now: a later session reads them and should not have to ask you again.",
+        "inputSchema": _schema({"root": ROOT, "name": _string("Task name"), "goal": _string("What the task is meant to achieve"), "constraints": _string("Hard rules to keep, e.g. no new dependencies"), "store": _string("Checkpoint directory; defaults to .checkpoints inside the workspace"), "exclude": {"type": "array", "items": {"type": "string"}, "description": "Extra exclude patterns, matched against a single path segment (a directory name or the first component of a path), e.g. [\"config\", \"*.local\"]"}}, ["root", "name"]),
+        "outputSchema": _schema({"task_id": _string("New task id"), "name": _string("Task name"), "store": _string("Checkpoint directory"), "store_is_external": {"type": "boolean"}, "prev_suspended": {"type": ["string", "null"]}, "exclude": {"type": "array", "items": {"type": "string"}}, "note": _string("Hint about where checkpoints are stored")}, ["task_id", "name", "store", "store_is_external", "note"]),
     },
     {
         "name": "tc_switch",
-        "description": "切换活动任务。closed 任务会被拒绝。",
-        "inputSchema": _schema({"root": ROOT, "task_id": _string("要激活的任务 id")}, ["root", "task_id"]),
+        "description": "Make an existing task the active one. Use it when you are picking up a different, already-recorded task in the same workspace. It rejects closed tasks and does not create tasks (use `tc_init` for that). You rarely need it: most tools accept an explicit `task_id`.",
+        "inputSchema": _schema({"root": ROOT, "task_id": _string("Task id to activate")}, ["root", "task_id"]),
         "outputSchema": _schema({"task_id": TASK_ID, "status": _string("open")}, ["task_id", "status"]),
     },
     {
         "name": "tc_save",
-        "description": "保存一个任务层步骤。close=true 时关闭任务且不再接受保存。",
-        "inputSchema": _schema({"root": ROOT, "title": _string("步骤标题"), "task_id": TASK_ID, "description": _string("为什么这么做"), "conclusion": _string("这一步的结论"), "verified": {"type": "array", "items": {"type": "string"}}, "open_questions": {"type": "array", "items": {"type": "string"}}, "next": _string("下一步"), "close": {"type": "boolean"}, "paths": {"type": "array", "items": {"type": "string"}, "description": "预留路径范围参数；当前必须为空数组"}}, ["root", "title"]),
-        "outputSchema": _schema({"task_id": TASK_ID, "index": {"type": "integer"}, "title": _string("步骤标题"), "groups": {"type": "array"}, "skipped_paths": SKIPPED_PATHS, "idempotent": {"type": "boolean"}, "closed": {"type": "boolean"}, "status": _string("open / suspended / closed"), "active_task_changed": {"type": "boolean", "description": "本次调用是否把活动任务切走了（传了 task_id 且不是当前活动任务时会发生）"}, "git": GIT_INFO}, ["task_id", "index", "title", "groups", "skipped_paths", "idempotent", "closed", "status", "active_task_changed", "git"]),
+        "description": "Record one step of the task. Use it after every verifiable mini-step (one file changed, one test passes), not once at the end: this record is what a later session resumes from. Say what you did, what you concluded and what comes next; do not log a play-by-play. Passing `close=true` closes the task and accepts no further saves. If you only want to snapshot the changed files without a step, use `tc_capture`.",
+        "inputSchema": _schema({"root": ROOT, "title": _string("Step title"), "task_id": TASK_ID, "description": _string("Why you did it this way"), "conclusion": _string("What this step established"), "verified": {"type": "array", "items": {"type": "string"}}, "open_questions": {"type": "array", "items": {"type": "string"}}, "next": _string("What to do next"), "close": {"type": "boolean"}, "paths": {"type": "array", "items": {"type": "string"}, "description": "Reserved for path scoping; must be an empty array for now"}}, ["root", "title"]),
+        "outputSchema": _schema({"task_id": TASK_ID, "index": {"type": "integer"}, "title": _string("Step title"), "groups": {"type": "array"}, "skipped_paths": SKIPPED_PATHS, "idempotent": {"type": "boolean"}, "closed": {"type": "boolean"}, "status": _string("open / suspended / closed"), "active_task_changed": {"type": "boolean", "description": "Whether this call moved the active task (happens when you pass a task_id that is not the active one)"}, "git": GIT_INFO}, ["task_id", "index", "title", "groups", "skipped_paths", "idempotent", "closed", "status", "active_task_changed", "git"]),
     },
     {
         "name": "tc_capture",
-        "description": "立即记录当前文件变化，不等静默期。",
+        "description": "Record the current file changes immediately, without waiting for the quiet period. Use it before a risky edit, or right before handing off when you want the changed files accounted for now. It records no step: if you also have something to conclude, use `tc_save`, which captures the changes as part of the step.",
         "inputSchema": _schema({"root": ROOT}, ["root"]),
         "outputSchema": _schema({"captured": {"type": "boolean"}, "waiting": {"type": "boolean"}, "drift_id": {"type": ["string", "null"]}, "partial": {"type": "boolean"}, "reads": {"type": "integer"}, "skipped_paths": SKIPPED_PATHS}, ["captured", "drift_id", "partial", "reads", "waiting", "skipped_paths"]),
     },
     {
         "name": "tc_show",
-        "description": "列出任务层步骤；include_drift=true 时同时列出变更层。index 可精确查看单步。",
+        "description": "List the task steps; with `include_drift=true` it also lists the change (drift) layers. Use it to look back at what happened, or to find the `index` or `drift_id` you need for `tc_restore`. For just \"where am I and what is next\", `tc_resume` is cheaper. Pass `index` to read one step in full.",
         "inputSchema": _schema({"root": ROOT, "task_id": TASK_ID, "index": {"type": "integer", "minimum": 1}, "include_drift": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "cursor": {"type": "integer", "minimum": 0}}, ["root"]),
         "outputSchema": _schema({"steps": {"type": "array"}, "drifts": {"type": "array"}, "head": {"type": "integer"}, "next_cursor": {"type": ["integer", "null"]}}, ["steps", "head"]),
     },
     {
         "name": "tc_restore",
-        "description": "按任务层序号或变更层编号恢复。index 与 drift_id 二选一；apply=false 只预览。",
-        "inputSchema": _schema({"root": ROOT, "index": {"type": "integer", "description": "任务层序号"}, "drift_id": _string("变更层编号，例如 d0001"), "apply": {"type": "boolean", "description": "true 才写工作区"}}, ["root"]),
-        "outputSchema": _schema({"applied": {"type": "boolean"}, "recovered": {"type": ["string", "null"], "description": "本次自动保全的变更层编号"}, "plan": {"type": "object"}, "skipped_paths": SKIPPED_PATHS}, ["applied", "recovered", "plan", "skipped_paths"]),
+        "description": "Roll the workspace back to a task step (`index`) or to a change layer (`drift_id`) — pass exactly one of the two. Use it when an edit went wrong. The rollback is itself recorded as a change layer, so a mistaken restore can be undone. Call it with `apply=false` first to see the plan without writing anything, then repeat with `apply=true`.",
+        "inputSchema": _schema({"root": ROOT, "index": {"type": "integer", "description": "Task step index"}, "drift_id": _string("Change layer id, e.g. d0001"), "apply": {"type": "boolean", "description": "true actually writes to the workspace"}}, ["root"]),
+        "outputSchema": _schema({"applied": {"type": "boolean"}, "recovered": {"type": ["string", "null"], "description": "Change layer id auto-preserved by this call"}, "plan": {"type": "object"}, "skipped_paths": SKIPPED_PATHS}, ["applied", "recovered", "plan", "skipped_paths"]),
     },
     {
         "name": "tc_resume",
-        "description": "只读返回目标、当前步骤、未落档路径和下一步。",
+        "description": "Read-only: returns the goal, current step, paths changed but not yet recorded, and what to do next. Call it first in a new session, before assuming anything about prior work — it writes nothing. If you already know what to do and only need the changed files, use `tc_show`; to continue on another machine, use `tc_export`.",
         "inputSchema": _schema({"root": ROOT, "task_id": TASK_ID}, ["root"]),
-        "outputSchema": _schema({"goal": _string("任务目标"), "constraints": _string("约束"), "head": {"type": "integer"}, "last": {"type": "object"}, "open_questions": {"type": "array"}, "drift_paths": {"type": "array"}, "next": _string("下一步"), "handoff": _string("可粘贴给新会话的文本"), "health": {"type": "object"}, "store": _string("存档目录"), "active_task": _string("活动任务"), "skipped": {"type": "array"}}, ["goal", "head", "drift_paths", "handoff", "health", "active_task"]),
+        "outputSchema": _schema({"goal": _string("What the task is meant to achieve"), "constraints": _string("Hard rules to keep"), "head": {"type": "integer"}, "last": {"type": "object"}, "open_questions": {"type": "array"}, "drift_paths": {"type": "array"}, "next": _string("What to do next"), "handoff": _string("Text you can paste into a new session"), "health": {"type": "object"}, "store": _string("Checkpoint directory"), "active_task": _string("Active task"), "skipped": {"type": "array"}}, ["goal", "head", "drift_paths", "handoff", "health", "active_task"]),
     },
     {
         "name": "tc_export",
-        "description": "导出交接包到一个已存在的目录。敏感文件内容不会导出。",
-        "inputSchema": _schema({"root": ROOT, "to": _string("已存在的导出父目录")}, ["root", "to"]),
-        "outputSchema": _schema({"path": _string("交接包目录"), "filtered": {"type": "array"}, "files": {"type": "array"}}, ["path", "filtered"]),
+        "description": "Write a handoff package into an existing directory so the task can continue on another machine or in another checkout; pair it with `tc_import` on the other side. Sensitive file contents are never exported (they appear in `filtered`). Use it to move work between machines — to resume in the same workspace, `tc_resume` is enough.",
+        "inputSchema": _schema({"root": ROOT, "to": _string("Existing parent directory to export into")}, ["root", "to"]),
+        "outputSchema": _schema({"path": _string("Package directory"), "filtered": {"type": "array"}, "files": {"type": "array"}}, ["path", "filtered"]),
     },
     {
         "name": "tc_import",
-        "description": "导入 tc_export 生成的交接包，在另一个目录或机器上接续任务。会校验任务 id 与工作区路径，拒绝重复任务、.. 穿越与符号链接目标；失败时撤销已写入的文件。",
-        "inputSchema": _schema({"root": ROOT, "package": _string("交接包目录，即 tc_export 返回的 path")}, ["root", "package"]),
-        "outputSchema": _schema({"task_id": _string("导入后的任务 id")}, ["task_id"]),
+        "description": "Import a package produced by `tc_export` and continue the task in another directory or on another machine. Use it on the receiving side of a handoff; to resume in the same workspace, `tc_resume` is enough and needs no package. It validates the task id and the workspace path, and refuses duplicate tasks, `..` traversal and symlink targets; if anything fails it rolls back the files it already wrote.",
+        "inputSchema": _schema({"root": ROOT, "package": _string("Package directory, i.e. the path returned by tc_export")}, ["root", "package"]),
+        "outputSchema": _schema({"task_id": _string("Task id after import")}, ["task_id"]),
     },
     {
         "name": "tc_compress",
-        "description": "回收存档空间：删掉超过保留期的变更层内容。被回收的变更层不能再 restore，步骤基线不受影响。",
+        "description": "Reclaim checkpoint space by deleting change-layer payloads older than the retention window. Use it when the store has grown large. Reclaimed layers can no longer be restored, but step baselines are untouched, so `tc_restore` by `index` still works.",
         "inputSchema": _schema({
             "root": ROOT,
-            "keep_seconds": {"type": "integer", "minimum": 0, "description": "保留最近多少秒内的变更层，默认 7 天"},
-            "minimum": {"type": "integer", "minimum": 0, "description": "每条路径至少保留几份较旧的变更层，默认 20"},
-            "maximum": {"type": "integer", "minimum": 1, "description": "每条路径最多保留几份变更层，默认 50"},
+            "keep_seconds": {"type": "integer", "minimum": 0, "description": "Keep change layers newer than this many seconds; default 7 days"},
+            "minimum": {"type": "integer", "minimum": 0, "description": "Minimum number of older layers to keep per path; default 20"},
+            "maximum": {"type": "integer", "minimum": 1, "description": "Maximum number of layers to keep per path; default 50"},
         }, ["root"]),
-        "outputSchema": _schema({"converted": {"type": "integer", "description": "本次真的删掉的 payload 数"}, "eligible": {"type": "integer", "description": "通过了保护检查、可以考虑回收的数量"}, "already_gone": {"type": "integer", "description": "已标为不可回退但 payload 本来就不在的数量"}, "bytes_freed": {"type": "integer", "description": "释放的字节数"}, "keep_seconds": {"type": "integer"}, "minimum": {"type": "integer"}, "maximum": {"type": "integer"}}, ["converted", "eligible", "already_gone", "bytes_freed", "keep_seconds", "minimum", "maximum"]),
+        "outputSchema": _schema({"converted": {"type": "integer", "description": "Payloads actually deleted"}, "eligible": {"type": "integer", "description": "Passed the safety checks and were eligible for reclaiming"}, "already_gone": {"type": "integer", "description": "Marked unrestorable but the payload was already absent"}, "bytes_freed": {"type": "integer", "description": "Bytes freed"}, "keep_seconds": {"type": "integer"}, "minimum": {"type": "integer"}, "maximum": {"type": "integer"}}, ["converted", "eligible", "already_gone", "bytes_freed", "keep_seconds", "minimum", "maximum"]),
     },
 ]
 

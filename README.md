@@ -213,6 +213,8 @@ args = []
 
 10 个。第一个参数都是 `root`，指工作区目录（通常是当前项目的绝对路径）。
 
+下面这张表是给人看的。**10 个工具的 `description` 本身是英文的** —— 那几行是读给模型听的，模型靠它决定该调哪个工具、不该调哪个，所以按 MCP 生态的通行语言写，并且每条都点明了使用场合和该换用哪个工具。这份 README 和 `SKILL.md` 保持中文优先。
+
 | 工具 | 什么时候用 | 必填 |
 |---|---|---|
 | `tc_init` | 长任务开工。已有活动任务会被挂起而不是关闭 | `root`, `name` |
@@ -297,7 +299,7 @@ python -m unittest discover -s tests -p "test_*.py" -v
 |---|---|
 | CI 的 ubuntu runner | **4.7 秒** |
 | CI 的 windows runner | 39.8 秒 |
-| 本机 Windows（E 盘） | **156～340 秒** |
+| 本机 Windows（E 盘） | **31～340 秒**（同一台机器，空载 31 秒，同时跑构建或下载时会到 340 秒） |
 
 同一套代码差了七十倍。开销集中在 git 子进程（`refs/checkpoints/` 相关用例占大头）和静默期等待，对磁盘和杀毒的实时扫描极其敏感 —— **别把秒数当承诺**，也别拿一个数字去对比另一台机器。
 
@@ -680,6 +682,8 @@ Step granularity: a unit you can describe as "done, and the conclusion is X". To
 
 Ten. Every one takes `root` first — the workspace directory (usually the absolute path of the project).
 
+The table below is for humans. **The `description` of each tool is in English** — those strings are read by the model, which uses them to decide which tool to call and which to avoid, so they follow the language convention of the MCP ecosystem and spell out the usage situation and the tool to use instead. This README and `SKILL.md` stay Chinese-first.
+
 | Tool | When to use | Required |
 |---|---|---|
 | `tc_init` | Starting a long task. An existing active task gets suspended, not closed | `root`, `name` |
@@ -764,7 +768,7 @@ The last line should be `OK`. How long the full suite (100+ cases) takes **depen
 |---|---|
 | CI ubuntu runner | **4.7 s** |
 | CI windows runner | 39.8 s |
-| This machine, Windows (E: drive) | **156–340 s** |
+| This machine, Windows (E: drive) | **31–340 s** (same machine: 31 s when idle, 340 s with builds or downloads running alongside) |
 
 The same code, a 70× spread. The cost sits in git subprocesses (the `refs/checkpoints/` cases dominate) and quiet-period waits, and it is extremely sensitive to disk speed and to on-access antivirus scanning — so **don't treat any of these numbers as a promise**, and don't compare machines by them.
 

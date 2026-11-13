@@ -900,20 +900,31 @@ class ProtocolSmoke(unittest.TestCase):
             self.assertEqual(ids, [1, 2, 3])
 
     def test_server_writes_utf8_frames(self):
-        """MCP 帧必须是 UTF-8；本地代码页下中文描述会被写成乱码。"""
+        """MCP 帧必须是 UTF-8；本地代码页下中文会被写成乱码。
+
+        探针不再依赖工具描述的语言（描述从 0.1.8 起是英文），改用真实的中文
+        任务数据走一遍：建任务 → 续接，中文必须原样穿过管道回来。
+        """
         script = Path(__file__).resolve().parents[1] / "scripts" / "tc_mcp.py"
-        messages = [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-        ]
-        payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in messages).encode("utf-8")
-        result = subprocess.run([sys.executable, str(script)], input=payload, capture_output=True,
-                                timeout=10, env={**os.environ, "TC_WATCH": "off"})
-        text = result.stdout.decode("utf-8")
-        lines = [json.loads(line) for line in text.splitlines() if line.strip()]
-        self.assertEqual(len(lines), 2)
-        description = next(tool for tool in lines[1]["result"]["tools"] if tool["name"] == "tc_init")["description"]
-        self.assertTrue(any("\u4e00" <= ch <= "\u9fff" for ch in description))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "ws"
+            root.mkdir()
+            goal = "把签发放一起的代码拆开"
+            messages = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "tc_init", "arguments": {"root": str(root), "name": "重构认证", "goal": goal}}},
+                {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                 "params": {"name": "tc_resume", "arguments": {"root": str(root)}}},
+            ]
+            payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in messages).encode("utf-8")
+            result = subprocess.run([sys.executable, str(script)], input=payload, capture_output=True,
+                                    timeout=10, env={**os.environ, "TC_WATCH": "off"})
+            text = result.stdout.decode("utf-8")
+            lines = [json.loads(line) for line in text.splitlines() if line.strip()]
+            self.assertEqual(len(lines), 3)
+            self.assertIn(goal, text)
+            self.assertEqual(lines[2]["result"]["structuredContent"]["goal"], goal)
 
     def test_structured_content_matches_declared_output_keys(self):
         script = Path(__file__).resolve().parents[1] / "scripts" / "tc_mcp.py"
